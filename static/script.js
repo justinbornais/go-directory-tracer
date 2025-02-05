@@ -36,7 +36,9 @@ function addData(val) {
         d2 = results.map(result => {
             return {
                 n: result.item.n,
-                t: result.item.t
+                t: result.item.t,
+                m: result.item.m,
+                s: result.item.s,
             };
         });
     }
