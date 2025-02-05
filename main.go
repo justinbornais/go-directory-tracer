@@ -12,10 +12,8 @@ func main() {
 	title := flag.String("title", "Sample Website", "Specify the title of the website")
 	flag.Parse()
 
-	css, err := utilities.ReadFileToString("./static/style.css")
-	utilities.CheckError(err)
-	js, err := utilities.ReadFileToString("./static/script.js")
-	utilities.CheckError(err)
+	css := utilities.GetCSS()
+	js := utilities.GetJS()
 	ignored, err := utilities.ReadFileIgnore("./.fileignore")
 	utilities.CheckError(err)
 
