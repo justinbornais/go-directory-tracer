@@ -3,6 +3,8 @@ package utilities
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 func GetFolders(directory string) ([]Folder, error) {
@@ -63,4 +65,27 @@ func GetFiles(directory string) ([]File, error) {
 	}
 
 	return files, nil
+}
+
+// Helper function to read file as string.
+func ReadFileToString(filePath string) (string, error) {
+	// Read the file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	fileContents := string(data)
+
+	// Remove block comments and unnecessary whitespace.
+	re := regexp.MustCompile(`/\*.*?\*/`)
+	fileContents = re.ReplaceAllString(fileContents, "")
+	fileContents = strings.ReplaceAll(fileContents, "\n", "")
+	fileContents = strings.ReplaceAll(fileContents, "\r", "")
+	fileContents = strings.ReplaceAll(fileContents, "\t", "")
+
+	// Remove extra spaces.
+	fileContents = strings.Join(strings.Fields(fileContents), " ")
+
+	return fileContents, nil
 }

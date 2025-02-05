@@ -2,29 +2,25 @@ package main
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/justinbornais/go-directory-tracer/utilities"
 )
 
-func CheckError(err error) {
-	if err != nil {
-		log.Fatalln(err)
-	}
-}
+const (
+	TITLE = "Sample Website"
+)
 
 func main() {
-	files, err := utilities.GetFiles(".")
-	CheckError(err)
-	folders, err := utilities.GetFolders(".")
-	CheckError(err)
+	css, err := utilities.ReadFileToString("./static/style.css")
+	utilities.CheckError(err)
+	js, err := utilities.ReadFileToString("./static/script.js")
+	utilities.CheckError(err)
+	ignored, err := utilities.ReadFileIgnore("./.fileignore")
+	utilities.CheckError(err)
 
-	for _, file := range files {
-		fmt.Printf("%s\t%s\t%s\t%s\n", file.Name, file.Extension, file.Modified, file.Size)
-	}
-	for _, folder := range folders {
-		fmt.Printf("%s\t%s\t%s\n", folder.Name, folder.Modified, folder.Size)
-	}
+	html := utilities.GenerateBoilerplateHTML(TITLE, css, js)
+
+	utilities.IndexFolder(".", html, 0, ignored)
 
 	fmt.Println("Done.")
 }
