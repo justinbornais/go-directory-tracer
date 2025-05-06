@@ -24,7 +24,9 @@ To run, execute the following in the terminal, ensuring you pass the name of the
 ### Cloning the Repository
 Make sure you have Golang installed. After cloning the repository, you have more flexibility to modify the CSS and JS to your own styles.
 
-**Note:** The CS and JS in the `static` folder don't actually get used. Instead, you will need to embed your CSS and JS into the functions `GetCSS` and `GetJS` under [misc.go](./utilities/misc.go).
+**Note:** The CS and JS in the `static` folder don't actually get used. Instead, you will need to do one of the following:
+1. Embed your CSS and JS into the functions `GetCSS` and `GetJS` under [misc.go](./utilities/misc.go).
+2. Since you're running locally, you can just read the CSS and JS using [ReadFileToString](./utilities/files.go), and the program will even minimize it automatically for you.
 
 ## Running via GitHub Pages
 It also works for Github Pages. There is a sample workflow file [here](./.github/workflows/ghpages.yml) that runs the program and deploys it on Github Pages.

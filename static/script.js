@@ -18,7 +18,8 @@ const exts = {
     'jpg': '📷',
     'jpeg': '📷',
     'png': '📷',
-    'pdf': '📄'
+    'pdf': '📄',
+    'exe': '🖥️'
 };
   
 const emoji = (f) => {
