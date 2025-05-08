@@ -9,6 +9,8 @@ import (
 // Reads the .fileignore file line-by-line into a string slice.
 func ReadFileIgnore(filename string) ([]string, error) {
 	var lines []string
+	lines = append(lines, "tracer")
+	lines = append(lines, "tracer.exe")
 
 	file, err := os.Open(filename)
 	if err != nil {
