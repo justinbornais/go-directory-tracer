@@ -61,7 +61,9 @@ function addData(val) {
     let ih = d2.map(o => {
         if (o.t !== "f") return "";
         let href = Android ? `https://docs.google.com/viewerng/viewer?url=${link}${o.n}`:`${o.n}`;
-        return `<li class="f"><a href="${href}" target="_blank">${emoji(o.n)} ${o.n}</a></li>`;
+        let temp = '';
+        if ([audio_embed])  temp = `<br /><audio controls class="ia" preload="none"><source src="${link.replace("index.html", "")}${o.n}" type="audio/mpeg"></audio>`;
+        return `<li class="f"><a href="${href}" target="_blank">${emoji(o.n)} ${o.n}</a>${temp}</li>`;
     }).join('');
     ul.innerHTML += ih;
 }

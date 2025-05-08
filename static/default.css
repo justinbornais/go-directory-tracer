@@ -19,3 +19,4 @@ ul, li { list-style-type: none; }
 .d { font-size: 20px; font-weight: bold; }
 .f { font-size: 18px; padding-right: 10%; }
 .q { width: 100%; font-size: 20px; padding: 12px 20px; margin: 8px 0; box-sizing: border-box; }
+.ia { display: inline-block; vertical-align: middle; }

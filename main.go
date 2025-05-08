@@ -14,10 +14,11 @@ var StaticFiles embed.FS
 func main() {
 	// Get from command line.
 	title := flag.String("title", "Sample Website", "Specify the title of the website")
+	audio := flag.Bool("audio-embed", false, "Specifies if audio files should be directly embedded inside the HTML")
 	flag.Parse()
 
 	css := utilities.GetCSS(StaticFiles)
-	js := utilities.GetJS(StaticFiles)
+	js := utilities.GetJS(StaticFiles, *audio)
 	ignored, err := utilities.ReadFileIgnore("./.fileignore")
 	utilities.CheckError(err)
 

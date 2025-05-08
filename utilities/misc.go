@@ -14,7 +14,7 @@ func CheckError(err error) {
 }
 
 func GetCSS(file embed.FS) string {
-	data, err := file.ReadFile("static/style.css")
+	data, err := file.ReadFile("static/default.css")
 	CheckError(err)
 
 	strData := string(data)
@@ -28,8 +28,8 @@ func GetCSS(file embed.FS) string {
 	return strData
 }
 
-func GetJS(file embed.FS) string {
-	data, err := file.ReadFile("static/script.js")
+func GetJS(file embed.FS, audio bool) string {
+	data, err := file.ReadFile("static/default.js")
 	CheckError(err)
 
 	strData := string(data)
@@ -40,5 +40,10 @@ func GetJS(file embed.FS) string {
 	strData = strings.ReplaceAll(strData, "\r", "")
 	strData = strings.ReplaceAll(strData, "\t", "")
 	strData = strings.Join(strings.Fields(strData), " ") // Remove extra spaces.
+	if audio {
+		strData = strings.ReplaceAll(strData, "[audio_embed]", "true")
+	} else {
+		strData = strings.ReplaceAll(strData, "[audio_embed]", "false")
+	}
 	return strData
 }
