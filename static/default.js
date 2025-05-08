@@ -25,9 +25,13 @@ const exts = {
     'ogg': '🔊'
 };
   
-const emoji = (f) => {
+const em = (f) => {
     const ext = f.split('.').pop();
     return exts[ext] || '📄';
+};
+
+const ia = (f) => {
+    return !!f?.toLowerCase().match(/\.(mp3|wav|ogg|aac|flac|m4a)$/);
 };
 
 function addData(val) {
@@ -62,8 +66,8 @@ function addData(val) {
         if (o.t !== "f") return "";
         let href = Android ? `https://docs.google.com/viewerng/viewer?url=${link}${o.n}`:`${o.n}`;
         let temp = '';
-        if ([audio_embed])  temp = `<br /><audio controls class="ia" preload="none"><source src="${link.replace("index.html", "")}${o.n}" type="audio/mpeg"></audio>`;
-        return `<li class="f"><a href="${href}" target="_blank">${emoji(o.n)} ${o.n}</a>${temp}</li>`;
+        if ([audio_embed] && ia(o.n)) temp = `<br /><audio controls class="ia" preload="none"><source src="${link.replace("index.html", "")}${o.n}" type="audio/mpeg"></audio>`;
+        return `<li class="f"><a href="${href}" target="_blank">${em(o.n)} ${o.n}</a>${temp}</li>`;
     }).join('');
     ul.innerHTML += ih;
 }
