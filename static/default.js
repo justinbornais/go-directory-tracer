@@ -32,7 +32,7 @@ const em = (f) => {
 
 const toUrl = (f) => {
     return encodeURIComponent(f).replaceAll('#', '%23');
-}
+};
 
 const ia = (f) => {
     return !!f?.toLowerCase().match(/\.(mp3|wav|ogg|aac|flac|m4a)$/);
