@@ -68,7 +68,7 @@ function addData(val) {
 
     let ih = d2.map(o => {
         if (o.t !== "f") return "";
-        let href = Android ? `https://docs.google.com/viewerng/viewer?url=${link}${toUrl(o.n)}`:`${on}`;
+        let href = Android ? `https://docs.google.com/viewerng/viewer?url=${link}${toUrl(o.n)}`:`${toUrl(o.n)}`;
         let temp = '';
         if ([audio_embed] && ia(o.n))
             temp = `<br /><audio controls class="ia" preload="none"><source src="${toUrl(o.n)}" type="audio/mpeg"></audio>`;
