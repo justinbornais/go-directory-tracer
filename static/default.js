@@ -52,11 +52,10 @@ function addData(val) {
     }
     
     ul.textContent = "";
-    let on = encodeURIComponent(o.n);
 
     let fh = d2.map(o => {
         if (o.t !== "d") return "";
-        return `<li class="d"><a href="${on}">📁 ${o.n}</a></li>`;
+        return `<li class="d"><a href="${encodeURIComponent(o.n)}">📁 ${o.n}</a></li>`;
     }).join('');
     ul.innerHTML += fh;
     
@@ -65,10 +64,10 @@ function addData(val) {
 
     let ih = d2.map(o => {
         if (o.t !== "f") return "";
-        let href = Android ? `https://docs.google.com/viewerng/viewer?url=${link}${on}`:`${on}`;
+        let href = Android ? `https://docs.google.com/viewerng/viewer?url=${link}${encodeURIComponent(o.n)}`:`${on}`;
         let temp = '';
         if ([audio_embed] && ia(o.n))
-            temp = `<br /><audio controls class="ia" preload="none"><source src="${encodeURIComponent(`${o.n}`)}" type="audio/mpeg"></audio>`;
+            temp = `<br /><audio controls class="ia" preload="none"><source src="${encodeURIComponent(o.n)}" type="audio/mpeg"></audio>`;
         return `<li class="f"><a href="${href}" target="_blank">${em(o.n)} ${o.n}</a>${temp}</li>`;
     }).join('');
     ul.innerHTML += ih;
