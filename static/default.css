@@ -20,3 +20,4 @@ ul, li { list-style-type: none; }
 .f { font-size: 18px; padding-right: 10%; }
 .q { width: 100%; font-size: 20px; padding: 12px 20px; margin: 8px 0; box-sizing: border-box; }
 .ia { display: inline-block; vertical-align: middle; }
+audio { margin: 0.35rem 0 0.65rem; }
