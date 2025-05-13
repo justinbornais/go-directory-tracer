@@ -71,7 +71,7 @@ function addData(val) {
         let href = Android ? `https://docs.google.com/viewerng/viewer?url=${link}${toUrl(o.n)}`:`${toUrl(o.n)}`;
         let temp = '';
         if ([audio_embed] && ia(o.n))
-            temp = `<br /><audio controls class="ia" preload="none"><source src="${toUrl(o.n)}" type="audio/mpeg"></audio>`;
+            temp = `<br /><audio controls class="ia" preload="none"><source src="${toUrl(o.n)}" type="audio/mpeg"></audio><br />`;
         return `<li class="f"><a href="${href}" target="_blank">${em(o.n)} ${o.n}</a>${temp}</li>`;
     }).join('');
     ul.innerHTML += ih;
