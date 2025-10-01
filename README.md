@@ -24,6 +24,15 @@ To run, execute the following in the terminal, ensuring you pass the name of the
 ### Cloning the Repository
 Make sure you have Golang installed. After cloning the repository, you have more flexibility to modify the CSS and JS to your own styles.
 
+### Building the Binaries
+To build the binaries for both linux and windows, follow these commands:
+```sh
+$Env:GOOS = "linux"
+go build -ldflags='-s -w' -trimpath -o tracer
+$Env:GOOS = "windows"
+go build -ldflags='-s -w' -trimpath -o tracer.exe
+```
+
 ## Running via GitHub Pages
 It also works for Github Pages. There is a sample workflow file [here](./.github/workflows/ghpages.yml) that runs the program and deploys it on Github Pages.
 - It does not commit the index.html files to your branch directly. Instead, it runs the script and uploads it to the servers.
