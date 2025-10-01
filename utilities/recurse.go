@@ -35,7 +35,7 @@ func IndexFolder(directory, boilerplate string, depth int, ignored []string, jso
 
 	// Modify HTML with directory data.
 	boilerplate = WriteFolderName(directory, boilerplate)
-	jsData := WriteFolderJSON(filteredFolders) + WriteFileJSON(filteredFiles)
+	jsData := RemoveLastCharacter(WriteFolderJSON(filteredFolders) + WriteFileJSON(filteredFiles))
 	boilerplate = strings.ReplaceAll(boilerplate, "[data]", fmt.Sprintf("const d = [%s];", jsData))
 
 	// Optionall write data.json file.

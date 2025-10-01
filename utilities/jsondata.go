@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func removeLastCharacter(s string) string {
+func RemoveLastCharacter(s string) string {
 	r := []rune(s)
 	if len(r) <= 2 {
 		return s
@@ -30,5 +30,5 @@ func WriteFileJSON(files []File) string {
 			data.WriteString(fmt.Sprintf(`{"n":"%s","t":"f", "m":"%s", "s":"%s"},`, f.Name, f.Modified, f.Size))
 		}
 	}
-	return removeLastCharacter(data.String())
+	return data.String()
 }
