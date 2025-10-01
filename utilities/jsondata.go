@@ -15,19 +15,28 @@ func RemoveLastCharacter(s string) string {
 }
 
 // Be sure to call WriteFolderJSON before WriteFileJSON.
-func WriteFolderJSON(folders []Folder) string {
+func WriteFolderJSON(folders []Folder, details bool) string {
 	var data strings.Builder
 	for _, f := range folders {
-		data.WriteString(fmt.Sprintf(`{"n":"%s","t":"d", "m":"%s", "s":"%s"},`, f.Name, f.Modified, f.Size))
+		if details {
+			data.WriteString(fmt.Sprintf(`{"n":"%s","t":"d", "m":"%s", "s":"%s"},`, f.Name, f.Modified, f.Size))
+		} else {
+			data.WriteString(fmt.Sprintf(`{"n":"%s","t":"d"},`, f.Name))
+		}
 	}
 	return data.String()
 }
 
-func WriteFileJSON(files []File) string {
+func WriteFileJSON(files []File, details bool) string {
 	var data strings.Builder
 	for _, f := range files {
-		if f.Name != "index.html" {
+		if f.Name == "index.html" {
+			continue
+		}
+		if details {
 			data.WriteString(fmt.Sprintf(`{"n":"%s","t":"f", "m":"%s", "s":"%s"},`, f.Name, f.Modified, f.Size))
+		} else {
+			data.WriteString(fmt.Sprintf(`{"n":"%s","t":"f"},`, f.Name))
 		}
 	}
 	return data.String()

@@ -16,6 +16,7 @@ func main() {
 	title := flag.String("title", "Sample Website", "Specify the title of the website")
 	audio := flag.Bool("audio-embed", false, "Specifies if audio files should be directly embedded inside the HTML")
 	json := flag.Bool("json", false, "Specifies if directory contents should also be saved to a 'data.json' file for each directory")
+	details := flag.Bool("details", false, "Specifies if JSON objects should also include modified dates and file sizes")
 	flag.Parse()
 
 	css := utilities.GetCSS(StaticFiles)
@@ -25,7 +26,7 @@ func main() {
 
 	html := utilities.GenerateBoilerplateHTML(*title, css, js)
 
-	utilities.IndexFolder(".", html, 0, ignored, *json)
+	utilities.IndexFolder(".", html, 0, ignored, *json, *details)
 
 	fmt.Println("Done.")
 }
