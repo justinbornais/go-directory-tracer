@@ -5,15 +5,13 @@ import (
 	"strings"
 )
 
-func remove2ndLastCharacter(s string) string {
+func removeLastCharacter(s string) string {
 	r := []rune(s)
 	if len(r) <= 2 {
 		return s
 	}
 
-	index := len(r) - 2
-	r = append(r[:index], r[index+1:]...)
-	return string(r)
+	return string(r[:len(r)-1])
 }
 
 func WriteFolderJSON(folders []Folder) string {
@@ -21,7 +19,7 @@ func WriteFolderJSON(folders []Folder) string {
 	for _, f := range folders {
 		data.WriteString(fmt.Sprintf(`{"n":"%s","t":"d", "m":"%s", "s":"%s"},`, f.Name, f.Modified, f.Size))
 	}
-	return remove2ndLastCharacter(data.String())
+	return removeLastCharacter(data.String())
 }
 
 func WriteFileJSON(files []File) string {
@@ -31,5 +29,5 @@ func WriteFileJSON(files []File) string {
 			data.WriteString(fmt.Sprintf(`{"n":"%s","t":"f", "m":"%s", "s":"%s"},`, f.Name, f.Modified, f.Size))
 		}
 	}
-	return remove2ndLastCharacter(data.String())
+	return removeLastCharacter(data.String())
 }
