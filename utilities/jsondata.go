@@ -7,6 +7,10 @@ import (
 
 func remove2ndLastCharacter(s string) string {
 	r := []rune(s)
+	if len(r) <= 2 {
+		return s
+	}
+
 	index := len(r) - 2
 	r = append(r[:index], r[index+1:]...)
 	return string(r)
