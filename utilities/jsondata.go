@@ -14,12 +14,13 @@ func removeLastCharacter(s string) string {
 	return string(r[:len(r)-1])
 }
 
+// Be sure to call WriteFolderJSON before WriteFileJSON.
 func WriteFolderJSON(folders []Folder) string {
 	var data strings.Builder
 	for _, f := range folders {
 		data.WriteString(fmt.Sprintf(`{"n":"%s","t":"d", "m":"%s", "s":"%s"},`, f.Name, f.Modified, f.Size))
 	}
-	return removeLastCharacter(data.String())
+	return data.String()
 }
 
 func WriteFileJSON(files []File) string {
