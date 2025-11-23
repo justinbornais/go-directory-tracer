@@ -28,7 +28,7 @@ func GetCSS(file embed.FS) string {
 	return strData
 }
 
-func GetJS(file embed.FS, audio bool) string {
+func GetJS(file embed.FS, audio, android bool) string {
 	data, err := file.ReadFile("static/default.js")
 	CheckError(err)
 
@@ -45,5 +45,11 @@ func GetJS(file embed.FS, audio bool) string {
 	} else {
 		strData = strings.ReplaceAll(strData, "[audio_embed]", "false")
 	}
+ if android {
+		strData = strings.ReplaceAll(strData, "[android_pdf]", "true")
+	} else {
+		strData = strings.ReplaceAll(strData, "[android_pdf]", "false")
+	}
+
 	return strData
 }
