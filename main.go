@@ -17,7 +17,7 @@ func main() {
 	audio := flag.Bool("audio-embed", false, "Specifies if audio files should be directly embedded inside the HTML")
 	json := flag.Bool("json", false, "Specifies if directory contents should also be saved to a 'data.json' file for each directory")
 	details := flag.Bool("details", false, "Specifies if JSON objects should also include modified dates and file sizes")
- android := flag.Bool("android", false, "Specifies if the Google Docs viewer should be used when displaying PDFs")
+	android := flag.Bool("android", false, "Specifies if the Google Docs viewer should be used when displaying PDFs")
 	flag.Parse()
 
 	css := utilities.GetCSS(StaticFiles)

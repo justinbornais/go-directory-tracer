@@ -45,7 +45,7 @@ func GetJS(file embed.FS, audio, android bool) string {
 	} else {
 		strData = strings.ReplaceAll(strData, "[audio_embed]", "false")
 	}
- if android {
+	if android {
 		strData = strings.ReplaceAll(strData, "[android_pdf]", "true")
 	} else {
 		strData = strings.ReplaceAll(strData, "[android_pdf]", "false")
