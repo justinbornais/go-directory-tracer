@@ -12,6 +12,7 @@ func GenerateBoilerplateHTML(title, css, js string) string {
     <title>%s</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width">
+	<meta name="robots" content="noindex, nofollow">
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <style>%s</style>
 </head>
