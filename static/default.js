@@ -5,7 +5,12 @@ var link = window.location.href;
 
 const fuse = new Fuse(d, {
 	keys: ['n'],
-    includeScore: true
+    isCaseInsensitive: false,
+    distance: 100,
+    threshold: 0.25,
+    includeScore: true,
+    shouldSort: true,
+    minMatchCharLength: 3,
 });
 
 const exts = {
@@ -38,11 +43,15 @@ const ia = (f) => {
     return !!f?.toLowerCase().match(/\.(mp3|wav|ogg|aac|flac|m4a)$/);
 };
 
+const nq = (q) => {
+    return q.replace(/[.,\/#!?$%\^&\*;:{}=\-_`~()]/g, '').trim();
+}
+
 function addData(val) {
     var ul = document.getElementById("dl"); /* Get the ul element. */
     let d2 = [];
     
-    if(val.length === 0) d2 = [...d];
+    if(val.length <= 2) d2 = [...d];
     else {
         const results = fuse.search(val);
         d2 = results.map(result => {
@@ -78,4 +87,4 @@ function addData(val) {
 }
 
 addData("");
-document.getElementById("q").addEventListener("keyup", (e) => addData(e.target.value));
+document.getElementById("q").addEventListener("keyup", (e) => addData(nq(e.target.value)));
