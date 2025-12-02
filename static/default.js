@@ -44,47 +44,67 @@ const ia = (f) => {
 };
 
 const nq = (q) => {
-    return q.replace(/[.,\/#!?$%\^&\*;:{}=\-_`~()]/g, '').trim();
+    return q.replace(/[.,\/#!?$%\^&\*;:{}=\-_`~()]/g, '').trim().toLowerCase();
+};
+
+function buildList() {
+    const ul = document.getElementById("dl");
+    const frag = document.createDocumentFragment();
+
+    d.forEach(o => {
+        if (o.t !== "d") return;
+        const li = document.createElement("li");
+        li.dataset.name = nq(o.n);
+        li.dataset.type = "d";
+        li.className = "d";
+        li.innerHTML = `<a href="${toUrl(o.n)}">📁 ${o.n}</a>`;
+        frag.appendChild(li);
+    });
+
+    d.forEach(o => {
+        if (o.t !== "f") return;
+        const li = document.createElement("li");
+        li.dataset.name = nq(o.n);
+        li.dataset.type = o.t;
+        li.className = "f";
+        const href = (Android && [android_pdf]) ? `https://docs.google.com/viewerng/viewer?url=${link}${toUrl(o.n)}` : toUrl(o.n);
+        let temp = "";
+        if ([audio_embed] && ia(o.n)) {
+            temp = `<audio controls class="ia" preload="none"><source src="${toUrl(o.n)}" type="audio/mpeg"></audio>`;
+        }
+
+        li.innerHTML = `<a href="${href}" target="_blank">${em(o.n)} ${o.n}</a>${temp}`;
+        frag.appendChild(li);
+    });
+
+    ul.appendChild(frag);
 }
 
-function addData(val) {
-    var ul = document.getElementById("dl"); /* Get the ul element. */
-    let d2 = [];
-    
-    if(val.length <= 2) d2 = [...d];
-    else {
-        const results = fuse.search(val);
-        d2 = results.map(result => {
-            return {
-                n: result.item.n,
-                t: result.item.t,
-                m: result.item.m,
-                s: result.item.s,
-            };
-        });
+function filterList(q) {
+    const items = document.querySelectorAll('#dl > li');
+
+    if (q.length <= 2) {
+        items.forEach(li => li.classList.remove("hidden"));
+        return;
     }
-    
-    ul.textContent = "";
 
-    let fh = d2.map(o => {
-        if (o.t !== "d") return "";
-        return `<li class="d"><a href="${toUrl(o.n)}">📁 ${o.n}</a></li>`;
-    }).join('');
-    ul.innerHTML += fh;
-    
-    var br = document.createElement("br");
-    ul.appendChild(br);
+    const results = fuse.search(q).map(r => r.item);
+    const visibleNames = new Set(results.map(r => r.n));
 
-    let ih = d2.map(o => {
-        if (o.t !== "f") return "";
-        let href = (Android && [android_pdf]) ? `https://docs.google.com/viewerng/viewer?url=${link}${toUrl(o.n)}`:`${toUrl(o.n)}`;
-        let temp = '';
-        if ([audio_embed] && ia(o.n))
-            temp = `<br /><audio controls class="ia" preload="none"><source src="${toUrl(o.n)}" type="audio/mpeg"></audio>`;
-        return `<li class="f"><a href="${href}" target="_blank">${em(o.n)} ${o.n}</a>${temp}</li>`;
-    }).join('');
-    ul.innerHTML += ih;
+    items.forEach(li => {
+        const name = li.dataset.name;
+        if (visibleNames.has(name)) li.classList.remove("hidden");
+        else li.classList.add("hidden");
+    });
 }
 
-addData("");
-document.getElementById("q").addEventListener("keyup", (e) => addData(nq(e.target.value)));
+function debounce(fn, delay = 150) {
+    let timeout;
+    return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn(...args), delay);
+    };
+}
+
+buildList();
+document.getElementById("q").addEventListener("keyup", debounce((e) => filterList(nq(e.target.value)), 200));
