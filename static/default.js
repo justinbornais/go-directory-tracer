@@ -89,7 +89,7 @@ function filterList(q) {
     }
 
     const results = fuse.search(q).map(r => r.item);
-    const visibleNames = new Set(results.map(r => r.n));
+    const visibleNames = new Set(results.map(r => nq(r.n)));
 
     items.forEach(li => {
         const name = li.dataset.name;
@@ -107,4 +107,4 @@ function debounce(fn, delay = 150) {
 }
 
 buildList();
-document.getElementById("q").addEventListener("keyup", debounce((e) => filterList(nq(e.target.value)), 200));
+document.getElementById("q").addEventListener("keyup", debounce((e) => filterList(nq(e.target.value)), 150));
