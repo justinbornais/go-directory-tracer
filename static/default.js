@@ -5,12 +5,13 @@ var link = window.location.href;
 
 const fuse = new Fuse(d, {
 	keys: ['n'],
-    isCaseInsensitive: false,
+    isCaseSensitive: false,
     distance: 100,
     threshold: 0.25,
     includeScore: true,
     shouldSort: true,
     minMatchCharLength: 3,
+    ignoreLocation: true
 });
 
 const exts = {
