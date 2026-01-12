@@ -84,7 +84,7 @@ function buildList() {
 function filterList(q) {
     const items = document.querySelectorAll('#dl > li');
 
-    if (q.length <= 2) {
+    if (q.length < 2) {
         items.forEach(li => li.classList.remove("hidden"));
         return;
     }
