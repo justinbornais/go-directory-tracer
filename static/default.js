@@ -10,7 +10,7 @@ const fuse = new Fuse(d, {
     threshold: 0.25,
     includeScore: true,
     shouldSort: true,
-    minMatchCharLength: 3,
+    minMatchCharLength: 2,
     ignoreLocation: true
 });
 
