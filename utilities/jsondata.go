@@ -45,7 +45,7 @@ func WriteFileJSON(files []File, details bool, musicMetadata map[string]string) 
 		// Add music URL if available.
 		if musicMetadata != nil {
 			id := strings.TrimSuffix(f.Name, filepath.Ext(f.Name))
-			if url, exists := musicMetadata[id]; exists {
+			if url, exists := musicMetadata[id]; exists && url != "" {
 				entry += fmt.Sprintf(`,"u":"%s"`, url)
 			}
 		}

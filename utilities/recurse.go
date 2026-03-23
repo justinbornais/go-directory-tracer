@@ -36,7 +36,7 @@ func IndexFolder(directory, boilerplate string, depth int, ignored []string, jso
 	musicMetadata := make(map[string]string)
 	if music {
 		var err error
-		musicMetadata, err = ReadMusicMetadata(".")
+		musicMetadata, err = ReadMusicMetadata(directory)
 		if err != nil {
 			fmt.Println("Error reading music metadata:", err)
 		}
