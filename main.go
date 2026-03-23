@@ -18,6 +18,7 @@ func main() {
 	json := flag.Bool("json", false, "Specifies if directory contents should also be saved to a 'data.json' file for each directory")
 	details := flag.Bool("details", false, "Specifies if JSON objects should also include modified dates and file sizes")
 	android := flag.Bool("android", false, "Specifies if the Google Docs viewer should be used when displaying PDFs")
+	music := flag.Bool("music", false, "Specifies if metadata.json should be used to add audio URLs to data.json files")
 	flag.Parse()
 
 	css := utilities.GetCSS(StaticFiles)
@@ -27,7 +28,7 @@ func main() {
 
 	html := utilities.GenerateBoilerplateHTML(*title, css, js)
 
-	utilities.IndexFolder(".", html, 0, ignored, *json, *details)
+	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music)
 
 	fmt.Println("Done.")
 }

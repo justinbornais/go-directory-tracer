@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func IndexFolder(directory, boilerplate string, depth int, ignored []string, json, details bool) {
+func IndexFolder(directory, boilerplate string, depth int, ignored []string, json, details, music bool) {
 	fmt.Println("Indexing directory:", directory)
 
 	bcopy := boilerplate // Used for recursive call.
@@ -20,7 +20,7 @@ func IndexFolder(directory, boilerplate string, depth int, ignored []string, jso
 	for _, folder := range folders {
 		if !IsIgnored(folder.Name, ignored) {
 			filteredFolders = append(filteredFolders, folder)
-			IndexFolder(filepath.Join(directory, folder.Name), bcopy, depth+1, ignored, json, details) // Recursive call.
+			IndexFolder(filepath.Join(directory, folder.Name), bcopy, depth+1, ignored, json, details, music) // Recursive call.
 		}
 	}
 
@@ -33,9 +33,18 @@ func IndexFolder(directory, boilerplate string, depth int, ignored []string, jso
 		}
 	}
 
+	musicMetadata := make(map[string]string)
+	if music {
+		var err error
+		musicMetadata, err = ReadMusicMetadata(".")
+		if err != nil {
+			fmt.Println("Error reading music metadata:", err)
+		}
+	}
+
 	// Modify HTML with directory data.
 	boilerplate = WriteFolderName(directory, boilerplate)
-	jsData := RemoveLastCharacter(WriteFolderJSON(filteredFolders, details) + WriteFileJSON(filteredFiles, details))
+	jsData := RemoveLastCharacter(WriteFolderJSON(filteredFolders, details) + WriteFileJSON(filteredFiles, details, musicMetadata))
 	boilerplate = strings.ReplaceAll(boilerplate, "[data]", fmt.Sprintf("const d = [%s];", jsData))
 
 	// Optionall write data.json file.

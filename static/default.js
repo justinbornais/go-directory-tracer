@@ -74,11 +74,25 @@ function buildList() {
             temp = `<audio controls class="ia" preload="none"><source src="${toUrl(o.n)}" type="audio/mpeg"></audio>`;
         }
 
-        li.innerHTML = `<a href="${href}" target="_blank">${em(o.n)} ${o.n}</a>${temp}`;
+        let audioLink = "";
+        if (o.u && isValidURL(o.u)) {
+            audioLink = ` <a href="${o.u}" target="_blank" class="audio-link">(audio)</a>`;
+        }
+
+        li.innerHTML = `<a href="${href}" target="_blank">${em(o.n)} ${o.n}</a>${audioLink}${temp}`;
         frag.appendChild(li);
     });
 
     ul.appendChild(frag);
+}
+
+function isValidURL(string) {
+    try {
+        new URL(string);
+        return true;
+    } catch (_) {
+        return false;
+    }
 }
 
 function filterList(q) {

@@ -24,3 +24,4 @@ li.d:not(:has(+ li.d)) { margin-bottom: 0.75rem; }
 .q { width: 100%; font-size: 20px; padding: 12px 20px; margin: 8px 0; box-sizing: border-box; }
 .ia { display: inline-block; vertical-align: middle; }
 audio { margin: 0.35rem 0 0.65rem; }
+.audio-link { margin-left: 0.5rem; font-size: 0.9em; font-weight: normal; }

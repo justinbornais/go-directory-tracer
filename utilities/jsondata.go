@@ -2,6 +2,7 @@ package utilities
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -27,17 +28,30 @@ func WriteFolderJSON(folders []Folder, details bool) string {
 	return data.String()
 }
 
-func WriteFileJSON(files []File, details bool) string {
+func WriteFileJSON(files []File, details bool, musicMetadata map[string]string) string {
 	var data strings.Builder
 	for _, f := range files {
 		if f.Name == "index.html" {
 			continue
 		}
+
+		var entry string
 		if details {
-			data.WriteString(fmt.Sprintf(`{"n":"%s","t":"f", "m":"%s", "s":"%s"},`, f.Name, f.Modified, f.Size))
+			entry = fmt.Sprintf(`{"n":"%s","t":"f", "m":"%s", "s":"%s"`, f.Name, f.Modified, f.Size)
 		} else {
-			data.WriteString(fmt.Sprintf(`{"n":"%s","t":"f"},`, f.Name))
+			entry = fmt.Sprintf(`{"n":"%s","t":"f"`, f.Name)
 		}
+
+		// Add music URL if available.
+		if musicMetadata != nil {
+			id := strings.TrimSuffix(f.Name, filepath.Ext(f.Name))
+			if url, exists := musicMetadata[id]; exists {
+				entry += fmt.Sprintf(`,"u":"%s"`, url)
+			}
+		}
+
+		entry += "},"
+		data.WriteString(entry)
 	}
 	return data.String()
 }
