@@ -122,4 +122,4 @@ function debounce(fn, delay = 150) {
 }
 
 buildList();
-document.getElementById("q").addEventListener("keyup", debounce((e) => filterList(nq(e.target.value)), 150));
+document.getElementById("q").addEventListener("input", debounce((e) => filterList(nq(e.target.value)), 150));

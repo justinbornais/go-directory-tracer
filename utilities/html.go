@@ -18,7 +18,7 @@ func GenerateBoilerplateHTML(title, css, js string) string {
 </head>
 <body>
     <div id="top"><h1>[parent]<a class="n" href="[base]">%s</a>[dir]</h1>
-        <input type="text" class="q" id="q" placeholder="Search for a file" />
+        <input type="search" class="q" id="q" placeholder="Search..." />
     </div>
     <ul id="dl"></ul>
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
