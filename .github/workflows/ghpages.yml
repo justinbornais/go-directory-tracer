@@ -41,7 +41,7 @@ jobs:
           submodules: recursive
       - name: Download Go Binary
         run: |
-          curl -L -o ./tracer "https://github.com/justinbornais/go-directory-tracer/releases/download/v0.1.3/tracer"
+          curl -L -o ./tracer "https://github.com/justinbornais/go-directory-tracer/releases/download/latest/tracer"
           chmod +x ./tracer
       - name: Execute Go Binary
         run: ./tracer --title "Sample Directory"

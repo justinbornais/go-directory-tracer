@@ -28,6 +28,14 @@ func WriteFolderJSON(folders []Folder, details bool) string {
 	return data.String()
 }
 
+func WriteSearchEntryJSON(entries []SearchEntry) string {
+	var data strings.Builder
+	for _, e := range entries {
+		data.WriteString(fmt.Sprintf(`{"n":"%s","t":"%s","p":"%s"},`, e.Name, e.Type, e.Path))
+	}
+	return data.String()
+}
+
 func WriteFileJSON(files []File, details bool, musicMetadata map[string]string) string {
 	var data strings.Builder
 	for _, f := range files {

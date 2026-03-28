@@ -28,6 +28,21 @@ func GetCSS(file embed.FS) string {
 	return strData
 }
 
+func GetSearchJS(file embed.FS) string {
+	data, err := file.ReadFile("static/search.js")
+	CheckError(err)
+
+	strData := string(data)
+
+	re := regexp.MustCompile(`/\*.*?\*/`)
+	strData = re.ReplaceAllString(strData, "")
+	strData = strings.ReplaceAll(strData, "\n", "")
+	strData = strings.ReplaceAll(strData, "\r", "")
+	strData = strings.ReplaceAll(strData, "\t", "")
+	strData = strings.Join(strings.Fields(strData), " ")
+	return strData
+}
+
 func GetJS(file embed.FS, audio, android bool) string {
 	data, err := file.ReadFile("static/default.js")
 	CheckError(err)

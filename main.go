@@ -19,6 +19,7 @@ func main() {
 	details := flag.Bool("details", false, "Specifies if JSON objects should also include modified dates and file sizes")
 	android := flag.Bool("android", false, "Specifies if the Google Docs viewer should be used when displaying PDFs")
 	music := flag.Bool("music", false, "Specifies if metadata.json should be used to add audio URLs to data.json files")
+	globalSearch := flag.Bool("global-search", false, "Generate a root-level search.html with a cross-directory search index")
 	flag.Parse()
 
 	css := utilities.GetCSS(StaticFiles)
@@ -28,7 +29,14 @@ func main() {
 
 	html := utilities.GenerateBoilerplateHTML(*title, css, js)
 
-	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music)
+	var entries []utilities.SearchEntry
+	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, &entries)
+
+	if *globalSearch {
+		searchJS := utilities.GetSearchJS(StaticFiles)
+		searchHTML := utilities.GenerateSearchHTML(*title, css, searchJS)
+		utilities.WriteSearchPage(searchHTML, entries)
+	}
 
 	fmt.Println("Done.")
 }

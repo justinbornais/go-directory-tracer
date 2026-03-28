@@ -1,0 +1,1 @@
+Get-ChildItem -Path . -Recurse -Include index.html,search.html,data.json -File | Remove-Item -Force
