@@ -33,3 +33,44 @@ func ReadMusicMetadata(dir string) (map[string]string, error) {
 
 	return metadataMap, nil
 }
+
+func ResolveExternalLinks(dir string, music bool, catalog *Catalog) (map[string]string, error) {
+	links := make(map[string]string)
+	var firstErr error
+
+	if music {
+		musicMetadata, err := ReadMusicMetadata(dir)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				firstErr = err
+			}
+		} else {
+			for key, value := range musicMetadata {
+				if value != "" {
+					links[key] = value
+				}
+			}
+		}
+	}
+
+	if catalog != nil {
+		catalogLinks, err := catalog.GetExternalLinks(dir)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+		} else {
+			for key, value := range catalogLinks {
+				if value != "" {
+					links[key] = value
+				}
+			}
+		}
+	}
+
+	if len(links) == 0 {
+		return nil, firstErr
+	}
+
+	return links, firstErr
+}

@@ -19,6 +19,7 @@ func main() {
 	details := flag.Bool("details", false, "Specifies if JSON objects should also include modified dates and file sizes")
 	android := flag.Bool("android", false, "Specifies if the Google Docs viewer should be used when displaying PDFs")
 	music := flag.Bool("music", false, "Specifies if metadata.json should be used to add audio URLs to data.json files")
+	sqlitePath := flag.String("sqlite", "", "Optional path to a SQLite catalog relative to the traced root")
 	globalSearch := flag.Bool("global-search", false, "Generate a root-level search.html with a cross-directory search index")
 	flag.Parse()
 
@@ -27,10 +28,19 @@ func main() {
 	ignored, err := utilities.ReadFileIgnore("./.fileignore")
 	utilities.CheckError(err)
 
+	var catalog *utilities.Catalog
+	if *sqlitePath != "" {
+		catalog, err = utilities.OpenCatalog(".", *sqlitePath)
+		utilities.CheckError(err)
+		defer func() {
+			utilities.CheckError(catalog.Close())
+		}()
+	}
+
 	html := utilities.GenerateBoilerplateHTML(*title, css, js)
 
 	var entries []utilities.SearchEntry
-	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, &entries)
+	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, catalog, &entries)
 
 	if *globalSearch {
 		searchJS := utilities.GetSearchJS(StaticFiles)

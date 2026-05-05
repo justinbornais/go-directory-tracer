@@ -21,6 +21,13 @@ To run, execute the following in the terminal, ensuring you pass the name of the
 ./tracer --title "Some Website Title"
 ```
 
+Optional SQLite catalog support can be enabled with `--sqlite`, using a database path relative to the traced root:
+```sh
+./tracer --title "Some Website Title" --json --music --sqlite "catalog.db"
+```
+
+When SQLite is enabled, the tracer will create the schema if needed, merge discovered directories and files into the catalog, and prefer `file_metadata.external_link` over `metadata.json` when both are present. The generated site stays static and still emits the same `u` field in `data.json` and the inline page data.
+
 ### Cloning the Repository
 Make sure you have Golang installed. After cloning the repository, you have more flexibility to modify the CSS and JS to your own styles.
 
@@ -37,3 +44,4 @@ go build -ldflags='-s -w' -trimpath -o tracer.exe
 It also works for Github Pages. There is a sample workflow file [here](./.github/workflows/ghpages.yml) that runs the program and deploys it on Github Pages.
 - It does not commit the index.html files to your branch directly. Instead, it runs the script and uploads it to the servers.
 - In fact, it does not even add the binary to your project whatsoever!
+- Running with `--sqlite` in a CI or Cloudflare Pages style build does not persist SQLite changes back to your repository unless the database file is separately committed or uploaded.
