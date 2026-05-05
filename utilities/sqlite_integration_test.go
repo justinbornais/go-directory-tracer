@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -16,7 +18,7 @@ type generatedEntry struct {
 func TestIndexFolderWithoutSQLitePreservesMetadataJSON(t *testing.T) {
 	root := copyFixtureToTempDir(t)
 	runFromDir(t, root, func() {
-		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, nil, nil)
+		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, nil)
 	})
 
 	rootEntries := readGeneratedEntries(t, filepath.Join(root, "data.json"))
@@ -62,7 +64,7 @@ ON CONFLICT(file_id) DO UPDATE SET
 	}
 
 	runFromDir(t, root, func() {
-		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, catalog, nil)
+		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, catalog)
 	})
 
 	rootEntries := readGeneratedEntries(t, filepath.Join(root, "data.json"))
@@ -78,11 +80,49 @@ ON CONFLICT(file_id) DO UPDATE SET
 	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "albums/live/encore.txt")
 }
 
+func TestWriteSearchPageUsesSQLiteCatalog(t *testing.T) {
+	root := copyFixtureToTempDir(t)
+	catalog, err := OpenCatalog(root, "catalog.db")
+	if err != nil {
+		t.Fatalf("open sqlite catalog: %v", err)
+	}
+	defer catalog.Close()
+
+	runFromDir(t, root, func() {
+		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, true, catalog)
+		if err := WriteSearchPage(GenerateSearchHTML("Fixture", "", ""), catalog); err != nil {
+			t.Fatalf("write SQLite-backed search page: %v", err)
+		}
+	})
+
+	searchHTML, err := os.ReadFile(filepath.Join(root, "search.html"))
+	if err != nil {
+		t.Fatalf("read generated search page: %v", err)
+	}
+
+	content := string(searchHTML)
+	assertContainsText(t, content, `const sd = [`)
+	assertContainsText(t, content, `{"n":"albums","t":"d","p":""}`)
+	assertContainsText(t, content, `{"n":"guide.txt","t":"f","p":"docs"}`)
+	assertContainsText(t, content, `{"n":"encore.txt","t":"f","p":"albums/live"}`)
+	assertNotContainsText(t, content, `catalog.db`)
+}
+
+func TestWriteSearchPageRequiresSQLiteCatalog(t *testing.T) {
+	err := WriteSearchPage(GenerateSearchHTML("Fixture", "", ""), nil)
+	if err == nil {
+		t.Fatal("expected SQLite-backed search page generation to require a catalog")
+	}
+	if !strings.Contains(err.Error(), "sqlite catalog is required") {
+		t.Fatalf("unexpected search page error: %v", err)
+	}
+}
+
 func copyFixtureToTempDir(t *testing.T) string {
 	t.Helper()
 
 	root := t.TempDir()
-	fixtureRoot := filepath.Join("testdata", "site-fixture")
+	fixtureRoot := filepath.Join(testFileDirectory(t), "testdata", "site-fixture")
 
 	err := filepath.Walk(fixtureRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -114,6 +154,17 @@ func copyFixtureToTempDir(t *testing.T) string {
 	}
 
 	return root
+}
+
+func testFileDirectory(t *testing.T) string {
+	t.Helper()
+
+	_, filePath, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file path")
+	}
+
+	return filepath.Dir(filePath)
 }
 
 func runFromDir(t *testing.T, dir string, fn func()) {
@@ -193,5 +244,21 @@ func assertCatalogHasRow(t *testing.T, catalog *Catalog, query, relPath string) 
 	}
 	if count == 0 {
 		t.Fatalf("expected sqlite catalog row for %q", relPath)
+	}
+}
+
+func assertContainsText(t *testing.T, text, want string) {
+	t.Helper()
+
+	if !strings.Contains(text, want) {
+		t.Fatalf("expected generated content to contain %q", want)
+	}
+}
+
+func assertNotContainsText(t *testing.T, text, unwanted string) {
+	t.Helper()
+
+	if strings.Contains(text, unwanted) {
+		t.Fatalf("did not expect generated content to contain %q", unwanted)
 	}
 }

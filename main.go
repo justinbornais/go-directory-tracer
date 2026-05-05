@@ -36,16 +36,18 @@ func main() {
 			utilities.CheckError(catalog.Close())
 		}()
 	}
+	if *globalSearch && catalog == nil {
+		utilities.CheckError(fmt.Errorf("--global-search requires --sqlite"))
+	}
 
 	html := utilities.GenerateBoilerplateHTML(*title, css, js)
 
-	var entries []utilities.SearchEntry
-	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, catalog, &entries)
+	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, catalog)
 
 	if *globalSearch {
 		searchJS := utilities.GetSearchJS(StaticFiles)
 		searchHTML := utilities.GenerateSearchHTML(*title, css, searchJS)
-		utilities.WriteSearchPage(searchHTML, entries)
+		utilities.CheckError(utilities.WriteSearchPage(searchHTML, catalog))
 	}
 
 	fmt.Println("Done.")

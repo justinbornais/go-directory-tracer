@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -248,6 +249,81 @@ WHERE d.rel_path = ?
 	}
 
 	return links, nil
+}
+
+func (c *Catalog) GetSearchEntries() ([]SearchEntry, error) {
+	if c == nil {
+		return nil, fmt.Errorf("sqlite catalog is not initialized")
+	}
+
+	var entries []SearchEntry
+
+	directoryRows, err := c.db.Query(`
+SELECT rel_path
+FROM directories
+WHERE rel_path <> ''
+ORDER BY rel_path COLLATE NOCASE
+`)
+	if err != nil {
+		return nil, fmt.Errorf("read sqlite directories for search: %w", err)
+	}
+	defer directoryRows.Close()
+
+	for directoryRows.Next() {
+		var relPath string
+		if err := directoryRows.Scan(&relPath); err != nil {
+			return nil, fmt.Errorf("scan sqlite search directory: %w", err)
+		}
+		entries = append(entries, SearchEntry{
+			Name: pathBase(relPath),
+			Type: "d",
+			Path: parentRelativePath(relPath),
+		})
+	}
+	if err := directoryRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sqlite directories for search: %w", err)
+	}
+
+	fileRows, err := c.db.Query(`
+SELECT basename, rel_path
+FROM files
+WHERE is_deleted = 0
+ORDER BY rel_path COLLATE NOCASE
+`)
+	if err != nil {
+		return nil, fmt.Errorf("read sqlite files for search: %w", err)
+	}
+	defer fileRows.Close()
+
+	for fileRows.Next() {
+		var basename, relPath string
+		if err := fileRows.Scan(&basename, &relPath); err != nil {
+			return nil, fmt.Errorf("scan sqlite search file: %w", err)
+		}
+		if c.IsCatalogFile(relPath) {
+			continue
+		}
+		entries = append(entries, SearchEntry{
+			Name: basename,
+			Type: "f",
+			Path: parentRelativePath(relPath),
+		})
+	}
+	if err := fileRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sqlite files for search: %w", err)
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Path != entries[j].Path {
+			return entries[i].Path < entries[j].Path
+		}
+		if entries[i].Type != entries[j].Type {
+			return entries[i].Type < entries[j].Type
+		}
+		return entries[i].Name < entries[j].Name
+	})
+
+	return entries, nil
 }
 
 func (c *Catalog) Close() error {

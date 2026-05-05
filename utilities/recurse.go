@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func IndexFolder(directory, boilerplate string, depth int, ignored []string, json, details, music, globalSearch bool, catalog *Catalog, entries *[]SearchEntry) {
+func IndexFolder(directory, boilerplate string, depth int, ignored []string, json, details, music, globalSearch bool, catalog *Catalog) {
 	fmt.Println("Indexing directory:", directory)
 
 	bcopy := boilerplate // Used for recursive call.
@@ -43,7 +43,7 @@ func IndexFolder(directory, boilerplate string, depth int, ignored []string, jso
 	}
 
 	for _, folder := range filteredFolders {
-		IndexFolder(filepath.Join(directory, folder.Name), bcopy, depth+1, ignored, json, details, music, globalSearch, catalog, entries) // Recursive call.
+		IndexFolder(filepath.Join(directory, folder.Name), bcopy, depth+1, ignored, json, details, music, globalSearch, catalog) // Recursive call.
 	}
 
 	// Get list of files and filter ignored ones.
@@ -59,20 +59,6 @@ func IndexFolder(directory, boilerplate string, depth int, ignored []string, jso
 	if catalog != nil {
 		if err := catalog.UpsertFiles(directory, filteredFiles); err != nil {
 			fmt.Println("Error syncing SQLite files:", err)
-		}
-	}
-
-	// Accumulate entries for the global search index.
-	if globalSearch && entries != nil {
-		entryPath := strings.ReplaceAll(directory, "\\", "/")
-		if entryPath == "." {
-			entryPath = ""
-		}
-		for _, f := range filteredFolders {
-			*entries = append(*entries, SearchEntry{Name: f.Name, Type: "d", Path: entryPath})
-		}
-		for _, f := range filteredFiles {
-			*entries = append(*entries, SearchEntry{Name: f.Name, Type: "f", Path: entryPath})
 		}
 	}
 
@@ -116,13 +102,24 @@ func shouldSkipCatalogPath(catalog *Catalog, path string) bool {
 	return catalog.IsCatalogFile(relPath)
 }
 
-// WriteSearchPage fills the [data] placeholder in htmlTemplate with the aggregated
+// WriteSearchPage fills the [data] placeholder in htmlTemplate with the SQLite-backed
 // search index and writes search.html to the root of the traced directory.
-func WriteSearchPage(htmlTemplate string, entries []SearchEntry) {
+func WriteSearchPage(htmlTemplate string, catalog *Catalog) error {
+	if catalog == nil {
+		return fmt.Errorf("sqlite catalog is required for global search")
+	}
+
+	entries, err := catalog.GetSearchEntries()
+	if err != nil {
+		return err
+	}
+
 	jsData := RemoveLastCharacter(WriteSearchEntryJSON(entries))
 	content := strings.ReplaceAll(htmlTemplate, "[data]", fmt.Sprintf("const sd = [%s];", jsData))
-	err := os.WriteFile("./search.html", []byte(content), 0644)
+	err = os.WriteFile("./search.html", []byte(content), 0644)
 	if err != nil {
-		fmt.Println("Error writing search.html:", err)
+		return fmt.Errorf("write search.html: %w", err)
 	}
+
+	return nil
 }

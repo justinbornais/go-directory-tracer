@@ -4,7 +4,7 @@
 This program, written in Golang, is used for turning a given directory into a makeshift file server. It does this by tracing through the root directory of your project and creating index.html webpages in each folder and subfolder, displaying the contents of each directory.
 
 ### Searching for Files and Folders
-This program also incorporates [Fuse.js](https://www.fusejs.io/) for lightweight fuzzy-searching of files on the webpage.
+This program also incorporates [Fuse.js](https://www.fusejs.io/) for lightweight fuzzy-searching of files on the webpage. The optional global search page is generated from the SQLite catalog, so `--global-search` must be used together with `--sqlite`.
 
 ### Omitting Files and Folders Using `.fileignore`
 To prevent files and folders from being included in the generated html pages, simply create a `.fileignore` file and list all file/folder names that you want omitted (one per line). By default, the `.fileignore` file is also ignored, so there's no need to add it to `.fileignore`.  
@@ -26,7 +26,12 @@ Optional SQLite catalog support can be enabled with `--sqlite`, using a database
 ./tracer --title "Some Website Title" --json --music --sqlite "catalog.db"
 ```
 
-When SQLite is enabled, the tracer will create the schema if needed, merge discovered directories and files into the catalog, and prefer `file_metadata.external_link` over `metadata.json` when both are present. The generated site stays static and still emits the same `u` field in `data.json` and the inline page data.
+To generate the cross-directory `search.html` page, enable SQLite and global search together:
+```sh
+./tracer --title "Some Website Title" --sqlite "catalog.db" --global-search
+```
+
+When SQLite is enabled, the tracer will create the schema if needed, merge discovered directories and files into the catalog, and prefer `file_metadata.external_link` over `metadata.json` when both are present. The generated site stays static and still emits the same `u` field in `data.json` and the inline page data. Global search now reads its index from SQLite instead of the in-memory directory walk.
 
 ### Cloning the Repository
 Make sure you have Golang installed. After cloning the repository, you have more flexibility to modify the CSS and JS to your own styles.
