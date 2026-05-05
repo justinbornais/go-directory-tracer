@@ -26,6 +26,11 @@ Optional SQLite catalog support can be enabled with `--sqlite`, using a database
 ./tracer --title "Some Website Title" --json --music --sqlite "catalog.db"
 ```
 
+To populate only the SQLite database without generating `index.html`, `data.json`, `search.html`, or any other tracer output files, add `--sqlite-only`:
+```sh
+./tracer --title "Some Website Title" --sqlite "catalog.db" --sqlite-only
+```
+
 To generate the cross-directory `search.html` page, enable SQLite and global search together:
 ```sh
 ./tracer --title "Some Website Title" --sqlite "catalog.db" --global-search

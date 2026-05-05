@@ -20,6 +20,7 @@ func main() {
 	android := flag.Bool("android", false, "Specifies if the Google Docs viewer should be used when displaying PDFs")
 	music := flag.Bool("music", false, "Specifies if metadata.json should be used to add audio URLs to data.json files")
 	sqlitePath := flag.String("sqlite", "", "Optional path to a SQLite catalog relative to the traced root")
+	sqliteOnly := flag.Bool("sqlite-only", false, "Only sync the SQLite catalog and do not generate index.html, data.json, or search.html files")
 	globalSearch := flag.Bool("global-search", false, "Generate a root-level search.html with a cross-directory search index")
 	flag.Parse()
 
@@ -39,12 +40,15 @@ func main() {
 	if *globalSearch && catalog == nil {
 		utilities.CheckError(fmt.Errorf("--global-search requires --sqlite"))
 	}
+	if *sqliteOnly && catalog == nil {
+		utilities.CheckError(fmt.Errorf("--sqlite-only requires --sqlite"))
+	}
 
 	html := utilities.GenerateBoilerplateHTML(*title, css, js)
 
-	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, catalog)
+	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, catalog, !*sqliteOnly)
 
-	if *globalSearch {
+	if *globalSearch && !*sqliteOnly {
 		searchJS := utilities.GetSearchJS(StaticFiles)
 		searchHTML := utilities.GenerateSearchHTML(*title, css, searchJS)
 		utilities.CheckError(utilities.WriteSearchPage(searchHTML, catalog))

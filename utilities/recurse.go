@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func IndexFolder(directory, boilerplate string, depth int, ignored []string, json, details, music, globalSearch bool, catalog *Catalog) {
+func IndexFolder(directory, boilerplate string, depth int, ignored []string, json, details, music, globalSearch bool, catalog *Catalog, writeFiles bool) {
 	fmt.Println("Indexing directory:", directory)
 
 	bcopy := boilerplate // Used for recursive call.
@@ -43,7 +43,7 @@ func IndexFolder(directory, boilerplate string, depth int, ignored []string, jso
 	}
 
 	for _, folder := range filteredFolders {
-		IndexFolder(filepath.Join(directory, folder.Name), bcopy, depth+1, ignored, json, details, music, globalSearch, catalog) // Recursive call.
+		IndexFolder(filepath.Join(directory, folder.Name), bcopy, depth+1, ignored, json, details, music, globalSearch, catalog, writeFiles) // Recursive call.
 	}
 
 	// Get list of files and filter ignored ones.
@@ -60,6 +60,10 @@ func IndexFolder(directory, boilerplate string, depth int, ignored []string, jso
 		if err := catalog.UpsertFiles(directory, filteredFiles); err != nil {
 			fmt.Println("Error syncing SQLite files:", err)
 		}
+	}
+
+	if !writeFiles {
+		return
 	}
 
 	musicMetadata, err := ResolveExternalLinks(directory, music, catalog)

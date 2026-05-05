@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -18,7 +17,7 @@ type generatedEntry struct {
 func TestIndexFolderWithoutSQLitePreservesMetadataJSON(t *testing.T) {
 	root := copyFixtureToTempDir(t)
 	runFromDir(t, root, func() {
-		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, nil)
+		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, nil, true)
 	})
 
 	rootEntries := readGeneratedEntries(t, filepath.Join(root, "data.json"))
@@ -64,7 +63,7 @@ ON CONFLICT(file_id) DO UPDATE SET
 	}
 
 	runFromDir(t, root, func() {
-		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, catalog)
+		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, catalog, true)
 	})
 
 	rootEntries := readGeneratedEntries(t, filepath.Join(root, "data.json"))
@@ -89,7 +88,7 @@ func TestWriteSearchPageUsesSQLiteCatalog(t *testing.T) {
 	defer catalog.Close()
 
 	runFromDir(t, root, func() {
-		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, true, catalog)
+		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, true, catalog, true)
 		if err := WriteSearchPage(GenerateSearchHTML("Fixture", "", ""), catalog); err != nil {
 			t.Fatalf("write SQLite-backed search page: %v", err)
 		}
@@ -118,53 +117,57 @@ func TestWriteSearchPageRequiresSQLiteCatalog(t *testing.T) {
 	}
 }
 
+func TestIndexFolderSQLiteOnlySkipsGeneratedFiles(t *testing.T) {
+	root := copyFixtureToTempDir(t)
+	catalog, err := OpenCatalog(root, "catalog.db")
+	if err != nil {
+		t.Fatalf("open sqlite catalog: %v", err)
+	}
+	defer catalog.Close()
+
+	runFromDir(t, root, func() {
+		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, true, catalog, false)
+	})
+
+	assertFileDoesNotExist(t, filepath.Join(root, "index.html"))
+	assertFileDoesNotExist(t, filepath.Join(root, "data.json"))
+	assertFileDoesNotExist(t, filepath.Join(root, "search.html"))
+	assertFileDoesNotExist(t, filepath.Join(root, "albums", "index.html"))
+	assertFileDoesNotExist(t, filepath.Join(root, "albums", "data.json"))
+
+	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM directories WHERE rel_path = ?`, "albums")
+	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "song.mp3")
+	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "albums/live/encore.txt")
+	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "docs/guide.txt")
+	assertCatalogDoesNotHaveRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "index.html")
+}
+
 func copyFixtureToTempDir(t *testing.T) string {
 	t.Helper()
 
 	root := t.TempDir()
-	fixtureRoot := filepath.Join(testFileDirectory(t), "testdata", "site-fixture")
 
-	err := filepath.Walk(fixtureRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	fixtureFiles := map[string]string{
+		"welcome.txt":            "Welcome to the fixture root.\n",
+		"song.mp3":               "Placeholder audio content.\n",
+		"metadata.json":          "[\n  {\n    \"n\": \"song\",\n    \"u\": \"https://fallback.example/root-song\"\n  }\n]\n",
+		"docs/guide.txt":         "Fixture documentation.\n",
+		"albums/track.mp3":       "Placeholder album audio.\n",
+		"albums/metadata.json":   "[\n  {\n    \"n\": \"track\",\n    \"u\": \"https://fallback.example/album-track\"\n  }\n]\n",
+		"albums/live/encore.txt": "Encore notes.\n",
+	}
 
-		relPath, err := filepath.Rel(fixtureRoot, path)
-		if err != nil {
-			return err
+	for relPath, content := range fixtureFiles {
+		targetPath := filepath.Join(root, filepath.FromSlash(relPath))
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			t.Fatalf("create fixture directory for %q: %v", relPath, err)
 		}
-		if relPath == "." {
-			return nil
+		if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
+			t.Fatalf("write fixture file %q: %v", relPath, err)
 		}
-
-		targetPath := filepath.Join(root, relPath)
-		if info.IsDir() {
-			return os.MkdirAll(targetPath, 0755)
-		}
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-
-		return os.WriteFile(targetPath, data, 0644)
-	})
-	if err != nil {
-		t.Fatalf("copy test fixture: %v", err)
 	}
 
 	return root
-}
-
-func testFileDirectory(t *testing.T) string {
-	t.Helper()
-
-	_, filePath, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("resolve test file path")
-	}
-
-	return filepath.Dir(filePath)
 }
 
 func runFromDir(t *testing.T, dir string, fn func()) {
@@ -235,6 +238,14 @@ func assertFileExists(t *testing.T, filePath string) {
 	}
 }
 
+func assertFileDoesNotExist(t *testing.T, filePath string) {
+	t.Helper()
+
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Fatalf("expected file %q to be absent, got err=%v", filePath, err)
+	}
+}
+
 func assertCatalogHasRow(t *testing.T, catalog *Catalog, query, relPath string) {
 	t.Helper()
 
@@ -244,6 +255,18 @@ func assertCatalogHasRow(t *testing.T, catalog *Catalog, query, relPath string) 
 	}
 	if count == 0 {
 		t.Fatalf("expected sqlite catalog row for %q", relPath)
+	}
+}
+
+func assertCatalogDoesNotHaveRow(t *testing.T, catalog *Catalog, query, relPath string) {
+	t.Helper()
+
+	var count int
+	if err := catalog.db.QueryRow(query, relPath).Scan(&count); err != nil {
+		t.Fatalf("query sqlite catalog for %q: %v", relPath, err)
+	}
+	if count != 0 {
+		t.Fatalf("did not expect sqlite catalog row for %q", relPath)
 	}
 }
 
