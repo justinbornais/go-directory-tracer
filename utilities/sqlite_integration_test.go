@@ -63,7 +63,12 @@ ON CONFLICT(file_id) DO UPDATE SET
 	}
 
 	runFromDir(t, root, func() {
-		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, catalog, true)
+		if err := catalog.WithSyncTransaction(func() error {
+			IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, catalog, true)
+			return nil
+		}); err != nil {
+			t.Fatalf("sync SQLite catalog in transaction: %v", err)
+		}
 	})
 
 	rootEntries := readGeneratedEntries(t, filepath.Join(root, "data.json"))
@@ -88,7 +93,12 @@ func TestWriteSearchPageUsesSQLiteCatalog(t *testing.T) {
 	defer catalog.Close()
 
 	runFromDir(t, root, func() {
-		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, true, catalog, true)
+		if err := catalog.WithSyncTransaction(func() error {
+			IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, true, catalog, true)
+			return nil
+		}); err != nil {
+			t.Fatalf("sync SQLite catalog in transaction: %v", err)
+		}
 		if err := WriteSearchPage(GenerateSearchHTML("Fixture", "", ""), catalog); err != nil {
 			t.Fatalf("write SQLite-backed search page: %v", err)
 		}
@@ -126,7 +136,12 @@ func TestIndexFolderSQLiteOnlySkipsGeneratedFiles(t *testing.T) {
 	defer catalog.Close()
 
 	runFromDir(t, root, func() {
-		IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, true, catalog, false)
+		if err := catalog.WithSyncTransaction(func() error {
+			IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, true, catalog, false)
+			return nil
+		}); err != nil {
+			t.Fatalf("sync SQLite catalog in transaction: %v", err)
+		}
 	})
 
 	assertFileDoesNotExist(t, filepath.Join(root, "index.html"))

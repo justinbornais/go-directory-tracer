@@ -16,6 +16,8 @@ type Catalog struct {
 	db      *sql.DB
 	rootDir string
 	relPath string
+	tx      *sql.Tx
+	dirIDs  map[string]int64
 }
 
 func OpenCatalog(rootDir, relPath string) (*Catalog, error) {
@@ -63,6 +65,7 @@ func OpenCatalog(rootDir, relPath string) (*Catalog, error) {
 		db:      db,
 		rootDir: absRoot,
 		relPath: normalizeRelativePath(resolvedRel),
+		dirIDs:  make(map[string]int64),
 	}
 
 	if err := catalog.EnsureSchema(); err != nil {
@@ -113,10 +116,57 @@ CREATE TABLE IF NOT EXISTS file_metadata (
 	return nil
 }
 
+func (c *Catalog) WithSyncTransaction(fn func() error) error {
+	if c == nil {
+		return fmt.Errorf("sqlite catalog is not initialized")
+	}
+	if c.tx != nil {
+		return fn()
+	}
+
+	tx, err := c.db.Begin()
+	if err != nil {
+		return fmt.Errorf("start sqlite sync transaction: %w", err)
+	}
+
+	previousTx := c.tx
+	previousDirIDs := c.dirIDs
+	c.tx = tx
+	c.dirIDs = make(map[string]int64, len(previousDirIDs))
+	for key, value := range previousDirIDs {
+		c.dirIDs[key] = value
+	}
+
+	defer func() {
+		c.tx = previousTx
+		c.dirIDs = previousDirIDs
+	}()
+
+	if err := fn(); err != nil {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return fmt.Errorf("rollback sqlite sync transaction after %v: %w", err, rollbackErr)
+		}
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit sqlite sync transaction: %w", err)
+	}
+
+	for key, value := range c.dirIDs {
+		previousDirIDs[key] = value
+	}
+
+	return nil
+}
+
 func (c *Catalog) UpsertDirectory(path string) (int64, error) {
 	relPath, err := c.relativePath(path)
 	if err != nil {
 		return 0, err
+	}
+	if directoryID, ok := c.dirIDs[relPath]; ok {
+		return directoryID, nil
 	}
 
 	var parentID any
@@ -131,7 +181,8 @@ func (c *Catalog) UpsertDirectory(path string) (int64, error) {
 		name = pathBase(relPath)
 	}
 
-	_, err = c.db.Exec(`
+	execTarget := c.execTarget()
+	_, err = execTarget.Exec(`
 INSERT INTO directories (parent_id, name, rel_path, updated_at)
 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 ON CONFLICT(rel_path) DO UPDATE SET
@@ -144,10 +195,11 @@ ON CONFLICT(rel_path) DO UPDATE SET
 	}
 
 	var directoryID int64
-	err = c.db.QueryRow(`SELECT id FROM directories WHERE rel_path = ?`, relPath).Scan(&directoryID)
+	err = c.queryRow(`SELECT id FROM directories WHERE rel_path = ?`, relPath).Scan(&directoryID)
 	if err != nil {
 		return 0, fmt.Errorf("read sqlite directory %q: %w", relPath, err)
 	}
+	c.dirIDs[relPath] = directoryID
 
 	return directoryID, nil
 }
@@ -168,11 +220,16 @@ func (c *Catalog) UpsertFiles(dirPath string, files []File) error {
 	}
 
 	absoluteDirectory := filepath.Join(c.rootDir, filepath.FromSlash(directoryRelPath))
-	tx, err := c.db.Begin()
-	if err != nil {
-		return fmt.Errorf("start sqlite transaction: %w", err)
+	execTarget := c.execTarget()
+	var tx *sql.Tx
+	if c.tx == nil {
+		tx, err = c.db.Begin()
+		if err != nil {
+			return fmt.Errorf("start sqlite transaction: %w", err)
+		}
+		execTarget = tx
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
 
 	for _, file := range files {
 		relPath := joinRelativePath(directoryRelPath, file.Name)
@@ -186,7 +243,7 @@ func (c *Catalog) UpsertFiles(dirPath string, files []File) error {
 			return fmt.Errorf("stat %q for sqlite sync: %w", relPath, err)
 		}
 
-		_, err = tx.Exec(`
+		_, err = execTarget.Exec(`
 INSERT INTO files (directory_id, basename, extension, rel_path, size_bytes, mtime_utc, is_deleted, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
 ON CONFLICT(rel_path) DO UPDATE SET
@@ -203,8 +260,10 @@ ON CONFLICT(rel_path) DO UPDATE SET
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit sqlite transaction: %w", err)
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit sqlite transaction: %w", err)
+		}
 	}
 
 	return nil
@@ -333,11 +392,30 @@ func (c *Catalog) Close() error {
 	return c.db.Close()
 }
 
+type sqlExecTarget interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func (c *Catalog) execTarget() sqlExecTarget {
+	if c != nil && c.tx != nil {
+		return c.tx
+	}
+	return c.db
+}
+
+func (c *Catalog) queryRow(query string, args ...any) *sql.Row {
+	if c != nil && c.tx != nil {
+		return c.tx.QueryRow(query, args...)
+	}
+	return c.db.QueryRow(query, args...)
+}
+
 func (c *Catalog) IsCatalogFile(relPath string) bool {
 	if c == nil {
 		return false
 	}
-	return normalizeRelativePath(relPath) == c.relPath
+	normalized := normalizeRelativePath(relPath)
+	return normalized == c.relPath || strings.HasPrefix(normalized, c.relPath+"-")
 }
 
 func (c *Catalog) relativePath(path string) (string, error) {

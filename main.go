@@ -46,7 +46,14 @@ func main() {
 
 	html := utilities.GenerateBoilerplateHTML(*title, css, js)
 
-	utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, catalog, !*sqliteOnly)
+	if catalog != nil {
+		utilities.CheckError(catalog.WithSyncTransaction(func() error {
+			utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, catalog, !*sqliteOnly)
+			return nil
+		}))
+	} else {
+		utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, catalog, !*sqliteOnly)
+	}
 
 	if *globalSearch && !*sqliteOnly {
 		searchJS := utilities.GetSearchJS(StaticFiles)
