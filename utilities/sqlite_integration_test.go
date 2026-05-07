@@ -1,11 +1,14 @@
 package utilities
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	_ "modernc.org/sqlite"
 )
 
 type generatedEntry struct {
@@ -204,6 +207,97 @@ ON CONFLICT(file_id) DO UPDATE SET
 	assertCatalogDoesNotHaveFile(t, catalog, "albums/live/", "encore.txt")
 	assertCatalogDoesNotHaveDirectory(t, catalog, "albums/", "live")
 	assertCatalogHasNoMetadata(t, catalog, "docs/", "guide.txt")
+}
+
+func TestOpenCatalogMigratesLegacySchema(t *testing.T) {
+	root := copyFixtureToTempDir(t)
+	legacyPath := filepath.Join(root, "catalog.db")
+	seedLegacyCatalog(t, legacyPath)
+
+	catalog, err := OpenCatalog(root, "catalog.db")
+	if err != nil {
+		t.Fatalf("open legacy sqlite catalog: %v", err)
+	}
+	defer catalog.Close()
+
+	assertCatalogHasDirectory(t, catalog, "", "albums")
+	assertCatalogHasFile(t, catalog, "docs/", "guide.txt")
+	assertCatalogHasNoMetadata(t, catalog, "albums/", "track.mp3")
+
+	var externalLink string
+	err = catalog.db.QueryRow(`
+SELECT m.external_link
+FROM file_metadata AS m
+JOIN files AS f ON f.id = m.file_id
+WHERE f.rel_path = ? AND f.basename = ?
+`, "", "song.mp3").Scan(&externalLink)
+	if err != nil {
+		t.Fatalf("read migrated sqlite metadata: %v", err)
+	}
+	if externalLink != "https://legacy.example/root-song" {
+		t.Fatalf("migrated sqlite metadata = %q, want %q", externalLink, "https://legacy.example/root-song")
+	}
+}
+
+func seedLegacyCatalog(t *testing.T, filePath string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", filePath)
+	if err != nil {
+		t.Fatalf("open legacy sqlite catalog for seeding: %v", err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE directories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  parent_id INTEGER REFERENCES directories(id),
+  name TEXT NOT NULL,
+  rel_path TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  directory_id INTEGER NOT NULL REFERENCES directories(id),
+  basename TEXT NOT NULL,
+  extension TEXT NOT NULL,
+  rel_path TEXT NOT NULL UNIQUE,
+  content_hash TEXT,
+  size_bytes INTEGER,
+  mtime_utc TEXT,
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE file_metadata (
+  file_id INTEGER PRIMARY KEY REFERENCES files(id),
+  external_link TEXT,
+  notes TEXT,
+  title_override TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO directories (id, parent_id, name, rel_path) VALUES
+  (1, NULL, 'tmp-root', ''),
+  (2, 1, 'albums', 'albums'),
+  (3, 1, 'docs', 'docs');
+
+INSERT INTO files (id, directory_id, basename, extension, rel_path, is_deleted) VALUES
+  (1, 1, 'song.mp3', '.mp3', 'song.mp3', 0),
+  (2, 2, 'track.mp3', '.mp3', 'albums/track.mp3', 0),
+  (3, 3, 'guide.txt', '.txt', 'docs/guide.txt', 0);
+
+INSERT INTO file_metadata (file_id, external_link, updated_at)
+VALUES (1, 'https://legacy.example/root-song', CURRENT_TIMESTAMP);
+`)
+	if err != nil {
+		t.Fatalf("seed legacy sqlite catalog: %v", err)
+	}
 }
 
 func copyFixtureToTempDir(t *testing.T) string {

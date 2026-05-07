@@ -179,7 +179,7 @@ func (c *Catalog) rebuildSchema() error {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(`
+	_, err = tx.Exec(fmt.Sprintf(`
 ALTER TABLE file_metadata RENAME TO file_metadata_legacy;
 ALTER TABLE files RENAME TO files_legacy;
 ALTER TABLE directories RENAME TO directories_legacy;
@@ -263,7 +263,7 @@ DROP TABLE files_legacy;
 DROP TABLE directories_legacy;
 
 PRAGMA user_version = %d;
-`, catalogSchemaVersion)
+`, catalogSchemaVersion))
 	if err != nil {
 		return fmt.Errorf("migrate sqlite schema: %w", err)
 	}
