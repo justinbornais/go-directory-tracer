@@ -3,6 +3,7 @@ package utilities
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,10 +42,7 @@ func TestIndexFolderWithoutSQLitePreservesMetadataJSON(t *testing.T) {
 
 func TestIndexFolderWithSQLitePrefersDatabaseAndSyncsCatalog(t *testing.T) {
 	root := copyFixtureToTempDir(t)
-	catalog, err := OpenCatalog(root, "catalog.db")
-	if err != nil {
-		t.Fatalf("open sqlite catalog: %v", err)
-	}
+	catalog := openTestCatalog(t, root, CatalogOptions{})
 	defer catalog.Close()
 
 	if err := catalog.UpsertFiles(".", []File{{Name: "song.mp3"}}); err != nil {
@@ -54,16 +52,7 @@ func TestIndexFolderWithSQLitePrefersDatabaseAndSyncsCatalog(t *testing.T) {
 		t.Fatalf("seed album file in sqlite: %v", err)
 	}
 
-	_, err = catalog.db.Exec(`
-INSERT INTO file_metadata (file_id, external_link, updated_at)
-VALUES ((SELECT id FROM files WHERE rel_path = ? AND basename = ?), ?, CURRENT_TIMESTAMP)
-ON CONFLICT(file_id) DO UPDATE SET
-  external_link = excluded.external_link,
-  updated_at = CURRENT_TIMESTAMP
-`, "", "song.mp3", "https://db.example/root-song")
-	if err != nil {
-		t.Fatalf("seed sqlite metadata: %v", err)
-	}
+	seedFileMetadataLink(t, catalog, "", "song.mp3", "https://db.example/root-song")
 
 	runFromDir(t, root, func() {
 		if err := catalog.WithSyncTransaction(func() error {
@@ -89,10 +78,7 @@ ON CONFLICT(file_id) DO UPDATE SET
 
 func TestWriteSearchPageUsesSQLiteCatalog(t *testing.T) {
 	root := copyFixtureToTempDir(t)
-	catalog, err := OpenCatalog(root, "catalog.db")
-	if err != nil {
-		t.Fatalf("open sqlite catalog: %v", err)
-	}
+	catalog := openTestCatalog(t, root, CatalogOptions{})
 	defer catalog.Close()
 
 	runFromDir(t, root, func() {
@@ -132,10 +118,7 @@ func TestWriteSearchPageRequiresSQLiteCatalog(t *testing.T) {
 
 func TestIndexFolderSQLiteOnlySkipsGeneratedFiles(t *testing.T) {
 	root := copyFixtureToTempDir(t)
-	catalog, err := OpenCatalog(root, "catalog.db")
-	if err != nil {
-		t.Fatalf("open sqlite catalog: %v", err)
-	}
+	catalog := openTestCatalog(t, root, CatalogOptions{})
 	defer catalog.Close()
 
 	runFromDir(t, root, func() {
@@ -162,10 +145,7 @@ func TestIndexFolderSQLiteOnlySkipsGeneratedFiles(t *testing.T) {
 
 func TestPruneMissingEntriesRemovesRowsAndMetadata(t *testing.T) {
 	root := copyFixtureToTempDir(t)
-	catalog, err := OpenCatalog(root, "catalog.db")
-	if err != nil {
-		t.Fatalf("open sqlite catalog: %v", err)
-	}
+	catalog := openTestCatalog(t, root, CatalogOptions{})
 	defer catalog.Close()
 
 	runFromDir(t, root, func() {
@@ -177,16 +157,7 @@ func TestPruneMissingEntriesRemovesRowsAndMetadata(t *testing.T) {
 		}
 	})
 
-	_, err = catalog.db.Exec(`
-INSERT INTO file_metadata (file_id, external_link, updated_at)
-VALUES ((SELECT id FROM files WHERE rel_path = ? AND basename = ?), ?, CURRENT_TIMESTAMP)
-ON CONFLICT(file_id) DO UPDATE SET
-  external_link = excluded.external_link,
-  updated_at = CURRENT_TIMESTAMP
-`, "docs/", "guide.txt", "https://db.example/docs-guide")
-	if err != nil {
-		t.Fatalf("seed sqlite metadata for pruning: %v", err)
-	}
+	seedFileMetadataLink(t, catalog, "docs/", "guide.txt", "https://db.example/docs-guide")
 
 	guidePath := filepath.Join(root, "docs", "guide.txt")
 	if err := os.Remove(guidePath); err != nil {
@@ -214,60 +185,54 @@ func TestOpenCatalogMigratesLegacySchema(t *testing.T) {
 	legacyPath := filepath.Join(root, "catalog.db")
 	seedLegacyCatalog(t, legacyPath)
 
-	catalog, err := OpenCatalog(root, "catalog.db")
-	if err != nil {
-		t.Fatalf("open legacy sqlite catalog: %v", err)
-	}
+	catalog := openTestCatalog(t, root, CatalogOptions{})
 	defer catalog.Close()
 
 	assertCatalogHasDirectory(t, catalog, "", "albums")
 	assertCatalogHasFile(t, catalog, "docs/", "guide.txt")
-	assertCatalogHasNoMetadata(t, catalog, "albums/", "track.mp3")
-
-	var externalLink string
-	err = catalog.db.QueryRow(`
-SELECT m.external_link
-FROM file_metadata AS m
-JOIN files AS f ON f.id = m.file_id
-WHERE f.rel_path = ? AND f.basename = ?
-`, "", "song.mp3").Scan(&externalLink)
-	if err != nil {
-		t.Fatalf("read migrated sqlite metadata: %v", err)
-	}
-	if externalLink != "https://legacy.example/root-song" {
-		t.Fatalf("migrated sqlite metadata = %q, want %q", externalLink, "https://legacy.example/root-song")
-	}
+	assertCatalogHasMetadataLink(t, catalog, "", "song.mp3", "https://legacy.example/root-song")
+	assertTableDoesNotHaveColumn(t, catalog, "files", "rel_path")
+	assertTableDoesNotHaveColumn(t, catalog, "files", "content_hash")
+	assertTableDoesNotHaveColumn(t, catalog, "directories", "created_at")
+	assertTableDoesNotHaveColumn(t, catalog, "file_metadata", "updated_at")
+	assertTableSQLContains(t, catalog, "file_metadata", "WITHOUT ROWID")
 }
 
-func TestOpenCatalogRemovesUnusedMtimeColumn(t *testing.T) {
+func TestOpenCatalogCompactsCurrentSchemaByDefault(t *testing.T) {
 	root := copyFixtureToTempDir(t)
 	currentPath := filepath.Join(root, "catalog.db")
-	seedCurrentCatalogWithMtime(t, currentPath)
+	seedCurrentCatalog(t, currentPath)
 
-	catalog, err := OpenCatalog(root, "catalog.db")
-	if err != nil {
-		t.Fatalf("open sqlite catalog with mtime column: %v", err)
-	}
+	catalog := openTestCatalog(t, root, CatalogOptions{})
 	defer catalog.Close()
-
-	hasColumn, err := catalog.hasColumn("files", "mtime_utc")
-	if err != nil {
-		t.Fatalf("inspect sqlite files columns: %v", err)
-	}
-	if hasColumn {
-		t.Fatal("expected mtime_utc column to be removed from files table")
-	}
 
 	assertCatalogHasFile(t, catalog, "docs/", "guide.txt")
 	assertCatalogHasDirectory(t, catalog, "", "albums")
+	assertTableDoesNotHaveColumn(t, catalog, "files", "rel_path")
+	assertTableDoesNotHaveColumn(t, catalog, "files", "content_hash")
+	assertTableDoesNotHaveColumn(t, catalog, "files", "created_at")
+	assertTableDoesNotHaveColumn(t, catalog, "files", "updated_at")
+	assertTableDoesNotHaveColumn(t, catalog, "directories", "created_at")
+	assertTableDoesNotHaveColumn(t, catalog, "directories", "updated_at")
+	assertTableDoesNotHaveColumn(t, catalog, "file_metadata", "created_at")
+	assertTableDoesNotHaveColumn(t, catalog, "file_metadata", "updated_at")
+	assertTableSQLContains(t, catalog, "file_metadata", "WITHOUT ROWID")
+}
+
+func TestOpenCatalogIncludesIntegerTimestampColumnsWhenEnabled(t *testing.T) {
+	root := copyFixtureToTempDir(t)
+	catalog := openTestCatalog(t, root, CatalogOptions{IncludeTimestamps: true})
+	defer catalog.Close()
+
+	assertIntegerTimestampColumns(t, catalog, "directories")
+	assertIntegerTimestampColumns(t, catalog, "files")
+	assertIntegerTimestampColumns(t, catalog, "file_metadata")
+	assertTableSQLContains(t, catalog, "file_metadata", "WITHOUT ROWID")
 }
 
 func TestCatalogVacuumAfterSync(t *testing.T) {
 	root := copyFixtureToTempDir(t)
-	catalog, err := OpenCatalog(root, "catalog.db")
-	if err != nil {
-		t.Fatalf("open sqlite catalog: %v", err)
-	}
+	catalog := openTestCatalog(t, root, CatalogOptions{})
 	defer catalog.Close()
 
 	runFromDir(t, root, func() {
@@ -286,8 +251,35 @@ func TestCatalogVacuumAfterSync(t *testing.T) {
 	assertCatalogHasFile(t, catalog, "", "song.mp3")
 }
 
+func openTestCatalog(t *testing.T, root string, options CatalogOptions) *Catalog {
+	t.Helper()
+
+	catalog, err := OpenCatalog(root, "catalog.db", options)
+	if err != nil {
+		t.Fatalf("open sqlite catalog: %v", err)
+	}
+
+	return catalog
+}
+
+func seedFileMetadataLink(t *testing.T, catalog *Catalog, directoryRelPath, basename, externalLink string) {
+	t.Helper()
+
+	fileID := catalogFileID(t, catalog, directoryRelPath, basename)
+	_, err := catalog.db.Exec(`
+INSERT INTO file_metadata (file_id, external_link)
+VALUES (?, ?)
+ON CONFLICT(file_id) DO UPDATE SET
+  external_link = excluded.external_link
+`, fileID, externalLink)
+	if err != nil {
+		t.Fatalf("seed sqlite metadata: %v", err)
+	}
+}
+
 func seedLegacyCatalog(t *testing.T, filePath string) {
 	t.Helper()
+	rootName := filepath.Base(filepath.Dir(filePath))
 
 	db, err := sql.Open("sqlite", filePath)
 	if err != nil {
@@ -295,7 +287,7 @@ func seedLegacyCatalog(t *testing.T, filePath string) {
 	}
 	defer db.Close()
 
-	_, err = db.Exec(`
+	_, err = db.Exec(fmt.Sprintf(`
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE directories (
@@ -330,7 +322,7 @@ CREATE TABLE file_metadata (
 );
 
 INSERT INTO directories (id, parent_id, name, rel_path) VALUES
-  (1, NULL, 'tmp-root', ''),
+	(1, NULL, '%s', ''),
   (2, 1, 'albums', 'albums'),
   (3, 1, 'docs', 'docs');
 
@@ -341,14 +333,17 @@ INSERT INTO files (id, directory_id, basename, extension, rel_path, is_deleted) 
 
 INSERT INTO file_metadata (file_id, external_link, updated_at)
 VALUES (1, 'https://legacy.example/root-song', CURRENT_TIMESTAMP);
-`)
+
+PRAGMA user_version = 3;
+`, rootName))
 	if err != nil {
 		t.Fatalf("seed legacy sqlite catalog: %v", err)
 	}
 }
 
-func seedCurrentCatalogWithMtime(t *testing.T, filePath string) {
+func seedCurrentCatalog(t *testing.T, filePath string) {
 	t.Helper()
+	rootName := filepath.Base(filepath.Dir(filePath))
 
 	db, err := sql.Open("sqlite", filePath)
 	if err != nil {
@@ -356,59 +351,59 @@ func seedCurrentCatalogWithMtime(t *testing.T, filePath string) {
 	}
 	defer db.Close()
 
-	_, err = db.Exec(`
+	_, err = db.Exec(fmt.Sprintf(`
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE directories (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	parent_id INTEGER REFERENCES directories(id) ON DELETE CASCADE,
-	name TEXT NOT NULL,
-	rel_path TEXT NOT NULL,
-	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	UNIQUE(rel_path, name)
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  parent_id INTEGER REFERENCES directories(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  rel_path TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(rel_path, name)
 );
 
 CREATE TABLE files (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	directory_id INTEGER NOT NULL REFERENCES directories(id) ON DELETE CASCADE,
-	basename TEXT NOT NULL,
-	extension TEXT NOT NULL,
-	rel_path TEXT NOT NULL,
-	content_hash TEXT,
-	size_bytes INTEGER,
-	mtime_utc TEXT,
-	is_deleted INTEGER NOT NULL DEFAULT 0,
-	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	UNIQUE(rel_path, basename)
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  directory_id INTEGER NOT NULL REFERENCES directories(id) ON DELETE CASCADE,
+  basename TEXT NOT NULL,
+  extension TEXT NOT NULL,
+  rel_path TEXT NOT NULL,
+  content_hash TEXT,
+  size_bytes INTEGER,
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(rel_path, basename)
 );
 
 CREATE TABLE file_metadata (
-	file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
-	external_link TEXT,
-	notes TEXT,
-	title_override TEXT,
-	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+  external_link TEXT,
+  notes TEXT,
+  title_override TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_directories_parent_name ON directories(parent_id, name);
 CREATE INDEX idx_files_directory_basename ON files(directory_id, basename);
 CREATE INDEX idx_files_rel_path ON files(rel_path);
+CREATE INDEX idx_files_hash ON files(content_hash);
 
 INSERT INTO directories (id, parent_id, name, rel_path) VALUES
-	(1, NULL, 'tmp-root', ''),
-	(2, 1, 'albums', ''),
-	(3, 1, 'docs', '');
+	(1, NULL, '%s', ''),
+  (2, 1, 'albums', ''),
+  (3, 1, 'docs', '');
 
-INSERT INTO files (id, directory_id, basename, extension, rel_path, size_bytes, mtime_utc, is_deleted) VALUES
-	(1, 1, 'song.mp3', '.mp3', '', 12, '2026-05-07T00:00:00Z', 0),
-	(2, 3, 'guide.txt', '.txt', 'docs/', 24, '2026-05-07T00:00:00Z', 0);
+INSERT INTO files (id, directory_id, basename, extension, rel_path, content_hash, size_bytes, is_deleted) VALUES
+  (1, 1, 'song.mp3', '.mp3', '', '', 12, 0),
+  (2, 3, 'guide.txt', '.txt', 'docs/', '', 24, 0);
 
-PRAGMA user_version = 2;
-`)
+PRAGMA user_version = 3;
+`, rootName))
 	if err != nil {
-		t.Fatalf("seed sqlite catalog with mtime column: %v", err)
+		t.Fatalf("seed current sqlite catalog: %v", err)
 	}
 }
 
@@ -543,20 +538,15 @@ func assertCatalogDoesNotHaveDirectory(t *testing.T, catalog *Catalog, relPath, 
 func assertCatalogHasFile(t *testing.T, catalog *Catalog, relPath, basename string) {
 	t.Helper()
 
-	var count int
-	if err := catalog.db.QueryRow(`SELECT COUNT(1) FROM files WHERE rel_path = ? AND basename = ?`, relPath, basename).Scan(&count); err != nil {
-		t.Fatalf("query sqlite file %q%s: %v", relPath, basename, err)
-	}
-	if count == 0 {
-		t.Fatalf("expected sqlite file %q%s", relPath, basename)
-	}
+	_ = catalogFileID(t, catalog, relPath, basename)
 }
 
 func assertCatalogDoesNotHaveFile(t *testing.T, catalog *Catalog, relPath, basename string) {
 	t.Helper()
 
+	directoryID := catalogDirectoryID(t, catalog, relPath)
 	var count int
-	if err := catalog.db.QueryRow(`SELECT COUNT(1) FROM files WHERE rel_path = ? AND basename = ?`, relPath, basename).Scan(&count); err != nil {
+	if err := catalog.db.QueryRow(`SELECT COUNT(1) FROM files WHERE directory_id = ? AND basename = ?`, directoryID, basename).Scan(&count); err != nil {
 		t.Fatalf("query sqlite file %q%s: %v", relPath, basename, err)
 	}
 	if count != 0 {
@@ -567,18 +557,92 @@ func assertCatalogDoesNotHaveFile(t *testing.T, catalog *Catalog, relPath, basen
 func assertCatalogHasNoMetadata(t *testing.T, catalog *Catalog, relPath, basename string) {
 	t.Helper()
 
+	directoryID := catalogDirectoryID(t, catalog, relPath)
 	var count int
 	if err := catalog.db.QueryRow(`
 SELECT COUNT(1)
 FROM file_metadata AS m
 JOIN files AS f ON f.id = m.file_id
-WHERE f.rel_path = ? AND f.basename = ?
-`, relPath, basename).Scan(&count); err != nil {
+WHERE f.directory_id = ? AND f.basename = ?
+`, directoryID, basename).Scan(&count); err != nil {
 		t.Fatalf("query sqlite metadata %q%s: %v", relPath, basename, err)
 	}
 	if count != 0 {
 		t.Fatalf("did not expect sqlite metadata for %q%s", relPath, basename)
 	}
+}
+
+func assertCatalogHasMetadataLink(t *testing.T, catalog *Catalog, relPath, basename, expectedLink string) {
+	t.Helper()
+
+	fileID := catalogFileID(t, catalog, relPath, basename)
+	var externalLink string
+	if err := catalog.db.QueryRow(`SELECT external_link FROM file_metadata WHERE file_id = ?`, fileID).Scan(&externalLink); err != nil {
+		t.Fatalf("query sqlite metadata link %q%s: %v", relPath, basename, err)
+	}
+	if externalLink != expectedLink {
+		t.Fatalf("metadata link for %q%s = %q, want %q", relPath, basename, externalLink, expectedLink)
+	}
+}
+
+func assertTableDoesNotHaveColumn(t *testing.T, catalog *Catalog, tableName, columnName string) {
+	t.Helper()
+
+	hasColumn, err := catalog.hasColumn(tableName, columnName)
+	if err != nil {
+		t.Fatalf("inspect sqlite column %q.%q: %v", tableName, columnName, err)
+	}
+	if hasColumn {
+		t.Fatalf("did not expect sqlite column %q.%q", tableName, columnName)
+	}
+}
+
+func assertIntegerTimestampColumns(t *testing.T, catalog *Catalog, tableName string) {
+	t.Helper()
+
+	columns, err := catalog.tableColumns(tableName)
+	if err != nil {
+		t.Fatalf("inspect sqlite columns for %q: %v", tableName, err)
+	}
+	if !columnsHaveIntegerTimestamps(columns) {
+		t.Fatalf("expected integer timestamp columns on %q", tableName)
+	}
+}
+
+func assertTableSQLContains(t *testing.T, catalog *Catalog, tableName, token string) {
+	t.Helper()
+
+	hasToken, err := catalog.tableSQLContains(tableName, token)
+	if err != nil {
+		t.Fatalf("inspect sqlite table SQL for %q: %v", tableName, err)
+	}
+	if !hasToken {
+		t.Fatalf("expected sqlite table %q SQL to contain %q", tableName, token)
+	}
+}
+
+func catalogDirectoryID(t *testing.T, catalog *Catalog, relPath string) int64 {
+	t.Helper()
+
+	directoryRelPath := strings.TrimSuffix(relPath, "/")
+	directoryID, err := catalog.directoryIDForPath(directoryRelPath)
+	if err != nil {
+		t.Fatalf("read sqlite directory ID for %q: %v", relPath, err)
+	}
+
+	return directoryID
+}
+
+func catalogFileID(t *testing.T, catalog *Catalog, relPath, basename string) int64 {
+	t.Helper()
+
+	directoryID := catalogDirectoryID(t, catalog, relPath)
+	var fileID int64
+	if err := catalog.db.QueryRow(`SELECT id FROM files WHERE directory_id = ? AND basename = ?`, directoryID, basename).Scan(&fileID); err != nil {
+		t.Fatalf("read sqlite file ID for %q%s: %v", relPath, basename, err)
+	}
+
+	return fileID
 }
 
 func assertContainsText(t *testing.T, text, want string) {

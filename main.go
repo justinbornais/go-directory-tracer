@@ -22,6 +22,7 @@ func main() {
 	sqlitePath := flag.String("sqlite", "", "Optional path to a SQLite catalog relative to the traced root")
 	sqliteOnly := flag.Bool("sqlite-only", false, "Only sync the SQLite catalog and do not generate index.html, data.json, or search.html files")
 	sqlitePruneMissing := flag.Bool("sqlite-prune-missing", false, "Remove SQLite rows for files and directories that no longer exist on disk")
+	sqliteTimestamps := flag.Bool("sqlite-timestamps", false, "Include created_at and updated_at Unix timestamp columns in the SQLite catalog")
 	globalSearch := flag.Bool("global-search", false, "Generate a root-level search.html with a cross-directory search index")
 	flag.Parse()
 
@@ -32,7 +33,7 @@ func main() {
 
 	var catalog *utilities.Catalog
 	if *sqlitePath != "" {
-		catalog, err = utilities.OpenCatalog(".", *sqlitePath)
+		catalog, err = utilities.OpenCatalog(".", *sqlitePath, utilities.CatalogOptions{IncludeTimestamps: *sqliteTimestamps})
 		utilities.CheckError(err)
 		defer func() {
 			utilities.CheckError(catalog.Close())
