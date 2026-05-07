@@ -21,6 +21,7 @@ func main() {
 	music := flag.Bool("music", false, "Specifies if metadata.json should be used to add audio URLs to data.json files")
 	sqlitePath := flag.String("sqlite", "", "Optional path to a SQLite catalog relative to the traced root")
 	sqliteOnly := flag.Bool("sqlite-only", false, "Only sync the SQLite catalog and do not generate index.html, data.json, or search.html files")
+	sqlitePruneMissing := flag.Bool("sqlite-prune-missing", false, "Remove SQLite rows for files and directories that no longer exist on disk")
 	globalSearch := flag.Bool("global-search", false, "Generate a root-level search.html with a cross-directory search index")
 	flag.Parse()
 
@@ -43,12 +44,20 @@ func main() {
 	if *sqliteOnly && catalog == nil {
 		utilities.CheckError(fmt.Errorf("--sqlite-only requires --sqlite"))
 	}
+	if *sqlitePruneMissing && catalog == nil {
+		utilities.CheckError(fmt.Errorf("--sqlite-prune-missing requires --sqlite"))
+	}
 
 	html := utilities.GenerateBoilerplateHTML(*title, css, js)
 
 	if catalog != nil {
 		utilities.CheckError(catalog.WithSyncTransaction(func() error {
 			utilities.IndexFolder(".", html, 0, ignored, *json, *details, *music, *globalSearch, catalog, !*sqliteOnly)
+			if *sqlitePruneMissing {
+				if err := catalog.PruneMissingEntries(); err != nil {
+					return err
+				}
+			}
 			return nil
 		}))
 	} else {

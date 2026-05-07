@@ -53,11 +53,11 @@ func TestIndexFolderWithSQLitePrefersDatabaseAndSyncsCatalog(t *testing.T) {
 
 	_, err = catalog.db.Exec(`
 INSERT INTO file_metadata (file_id, external_link, updated_at)
-VALUES ((SELECT id FROM files WHERE rel_path = ?), ?, CURRENT_TIMESTAMP)
+VALUES ((SELECT id FROM files WHERE rel_path = ? AND basename = ?), ?, CURRENT_TIMESTAMP)
 ON CONFLICT(file_id) DO UPDATE SET
   external_link = excluded.external_link,
   updated_at = CURRENT_TIMESTAMP
-`, "song.mp3", "https://db.example/root-song")
+`, "", "song.mp3", "https://db.example/root-song")
 	if err != nil {
 		t.Fatalf("seed sqlite metadata: %v", err)
 	}
@@ -79,9 +79,9 @@ ON CONFLICT(file_id) DO UPDATE SET
 	albumEntries := readGeneratedEntries(t, filepath.Join(root, "albums", "data.json"))
 	assertEntry(t, albumEntries, "track.mp3", "f", "https://fallback.example/album-track")
 
-	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM directories WHERE rel_path = ?`, "albums")
-	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "docs/guide.txt")
-	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "albums/live/encore.txt")
+	assertCatalogHasDirectory(t, catalog, "", "albums")
+	assertCatalogHasFile(t, catalog, "docs/", "guide.txt")
+	assertCatalogHasFile(t, catalog, "albums/live/", "encore.txt")
 }
 
 func TestWriteSearchPageUsesSQLiteCatalog(t *testing.T) {
@@ -150,11 +150,60 @@ func TestIndexFolderSQLiteOnlySkipsGeneratedFiles(t *testing.T) {
 	assertFileDoesNotExist(t, filepath.Join(root, "albums", "index.html"))
 	assertFileDoesNotExist(t, filepath.Join(root, "albums", "data.json"))
 
-	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM directories WHERE rel_path = ?`, "albums")
-	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "song.mp3")
-	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "albums/live/encore.txt")
-	assertCatalogHasRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "docs/guide.txt")
-	assertCatalogDoesNotHaveRow(t, catalog, `SELECT COUNT(1) FROM files WHERE rel_path = ?`, "index.html")
+	assertCatalogHasDirectory(t, catalog, "", "albums")
+	assertCatalogHasFile(t, catalog, "", "song.mp3")
+	assertCatalogHasFile(t, catalog, "albums/live/", "encore.txt")
+	assertCatalogHasFile(t, catalog, "docs/", "guide.txt")
+	assertCatalogDoesNotHaveFile(t, catalog, "", "index.html")
+}
+
+func TestPruneMissingEntriesRemovesRowsAndMetadata(t *testing.T) {
+	root := copyFixtureToTempDir(t)
+	catalog, err := OpenCatalog(root, "catalog.db")
+	if err != nil {
+		t.Fatalf("open sqlite catalog: %v", err)
+	}
+	defer catalog.Close()
+
+	runFromDir(t, root, func() {
+		if err := catalog.WithSyncTransaction(func() error {
+			IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, catalog, true)
+			return nil
+		}); err != nil {
+			t.Fatalf("sync SQLite catalog in transaction: %v", err)
+		}
+	})
+
+	_, err = catalog.db.Exec(`
+INSERT INTO file_metadata (file_id, external_link, updated_at)
+VALUES ((SELECT id FROM files WHERE rel_path = ? AND basename = ?), ?, CURRENT_TIMESTAMP)
+ON CONFLICT(file_id) DO UPDATE SET
+  external_link = excluded.external_link,
+  updated_at = CURRENT_TIMESTAMP
+`, "docs/", "guide.txt", "https://db.example/docs-guide")
+	if err != nil {
+		t.Fatalf("seed sqlite metadata for pruning: %v", err)
+	}
+
+	guidePath := filepath.Join(root, "docs", "guide.txt")
+	if err := os.Remove(guidePath); err != nil {
+		t.Fatalf("remove fixture file for pruning: %v", err)
+	}
+	livePath := filepath.Join(root, "albums", "live")
+	if err := os.RemoveAll(livePath); err != nil {
+		t.Fatalf("remove fixture directory for pruning: %v", err)
+	}
+
+	if err := catalog.WithSyncTransaction(func() error {
+		return catalog.PruneMissingEntries()
+	}); err != nil {
+		t.Fatalf("prune missing sqlite entries: %v", err)
+	}
+
+	assertCatalogDoesNotHaveFile(t, catalog, "docs/", "guide.txt")
+	assertCatalogDoesNotHaveFile(t, catalog, "albums/live/", "encore.txt")
+	assertCatalogDoesNotHaveDirectory(t, catalog, "albums/", "live")
+	assertCatalogHasNoMetadata(t, catalog, "docs/", "guide.txt")
 }
 
 func copyFixtureToTempDir(t *testing.T) string {
@@ -261,27 +310,68 @@ func assertFileDoesNotExist(t *testing.T, filePath string) {
 	}
 }
 
-func assertCatalogHasRow(t *testing.T, catalog *Catalog, query, relPath string) {
+func assertCatalogHasDirectory(t *testing.T, catalog *Catalog, relPath, name string) {
 	t.Helper()
 
 	var count int
-	if err := catalog.db.QueryRow(query, relPath).Scan(&count); err != nil {
-		t.Fatalf("query sqlite catalog for %q: %v", relPath, err)
+	if err := catalog.db.QueryRow(`SELECT COUNT(1) FROM directories WHERE rel_path = ? AND name = ?`, relPath, name).Scan(&count); err != nil {
+		t.Fatalf("query sqlite directory %q%s: %v", relPath, name, err)
 	}
 	if count == 0 {
-		t.Fatalf("expected sqlite catalog row for %q", relPath)
+		t.Fatalf("expected sqlite directory %q%s", relPath, name)
 	}
 }
 
-func assertCatalogDoesNotHaveRow(t *testing.T, catalog *Catalog, query, relPath string) {
+func assertCatalogDoesNotHaveDirectory(t *testing.T, catalog *Catalog, relPath, name string) {
 	t.Helper()
 
 	var count int
-	if err := catalog.db.QueryRow(query, relPath).Scan(&count); err != nil {
-		t.Fatalf("query sqlite catalog for %q: %v", relPath, err)
+	if err := catalog.db.QueryRow(`SELECT COUNT(1) FROM directories WHERE rel_path = ? AND name = ?`, relPath, name).Scan(&count); err != nil {
+		t.Fatalf("query sqlite directory %q%s: %v", relPath, name, err)
 	}
 	if count != 0 {
-		t.Fatalf("did not expect sqlite catalog row for %q", relPath)
+		t.Fatalf("did not expect sqlite directory %q%s", relPath, name)
+	}
+}
+
+func assertCatalogHasFile(t *testing.T, catalog *Catalog, relPath, basename string) {
+	t.Helper()
+
+	var count int
+	if err := catalog.db.QueryRow(`SELECT COUNT(1) FROM files WHERE rel_path = ? AND basename = ?`, relPath, basename).Scan(&count); err != nil {
+		t.Fatalf("query sqlite file %q%s: %v", relPath, basename, err)
+	}
+	if count == 0 {
+		t.Fatalf("expected sqlite file %q%s", relPath, basename)
+	}
+}
+
+func assertCatalogDoesNotHaveFile(t *testing.T, catalog *Catalog, relPath, basename string) {
+	t.Helper()
+
+	var count int
+	if err := catalog.db.QueryRow(`SELECT COUNT(1) FROM files WHERE rel_path = ? AND basename = ?`, relPath, basename).Scan(&count); err != nil {
+		t.Fatalf("query sqlite file %q%s: %v", relPath, basename, err)
+	}
+	if count != 0 {
+		t.Fatalf("did not expect sqlite file %q%s", relPath, basename)
+	}
+}
+
+func assertCatalogHasNoMetadata(t *testing.T, catalog *Catalog, relPath, basename string) {
+	t.Helper()
+
+	var count int
+	if err := catalog.db.QueryRow(`
+SELECT COUNT(1)
+FROM file_metadata AS m
+JOIN files AS f ON f.id = m.file_id
+WHERE f.rel_path = ? AND f.basename = ?
+`, relPath, basename).Scan(&count); err != nil {
+		t.Fatalf("query sqlite metadata %q%s: %v", relPath, basename, err)
+	}
+	if count != 0 {
+		t.Fatalf("did not expect sqlite metadata for %q%s", relPath, basename)
 	}
 }
 
