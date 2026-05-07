@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -20,7 +19,7 @@ type Catalog struct {
 	dirIDs  map[string]int64
 }
 
-const catalogSchemaVersion = 2
+const catalogSchemaVersion = 3
 
 func OpenCatalog(rootDir, relPath string) (*Catalog, error) {
 	if strings.TrimSpace(relPath) == "" {
@@ -114,7 +113,15 @@ func (c *Catalog) migrateSchema() error {
 	}
 
 	if legacyDirectories || legacyFiles {
-		return c.rebuildSchema()
+		return c.rebuildLegacySchema()
+	}
+
+	hasFileMtime, err := c.hasColumn("files", "mtime_utc")
+	if err != nil {
+		return err
+	}
+	if hasFileMtime {
+		return c.rebuildFilesWithoutMtime()
 	}
 
 	_, err = c.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, catalogSchemaVersion))
@@ -145,7 +152,6 @@ CREATE TABLE IF NOT EXISTS files (
   rel_path TEXT NOT NULL,
   content_hash TEXT,
   size_bytes INTEGER,
-  mtime_utc TEXT,
   is_deleted INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -172,7 +178,7 @@ PRAGMA user_version = %d;
 	return nil
 }
 
-func (c *Catalog) rebuildSchema() error {
+func (c *Catalog) rebuildLegacySchema() error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		return fmt.Errorf("start sqlite schema migration: %w", err)
@@ -202,7 +208,6 @@ CREATE TABLE files (
   rel_path TEXT NOT NULL,
   content_hash TEXT,
   size_bytes INTEGER,
-  mtime_utc TEXT,
   is_deleted INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -235,7 +240,7 @@ SELECT
   updated_at
 FROM directories_legacy;
 
-INSERT INTO files (id, directory_id, basename, extension, rel_path, content_hash, size_bytes, mtime_utc, is_deleted, created_at, updated_at)
+INSERT INTO files (id, directory_id, basename, extension, rel_path, content_hash, size_bytes, is_deleted, created_at, updated_at)
 SELECT
   id,
   directory_id,
@@ -248,7 +253,6 @@ SELECT
   END,
   content_hash,
   size_bytes,
-  mtime_utc,
   is_deleted,
   created_at,
   updated_at
@@ -275,6 +279,64 @@ PRAGMA user_version = %d;
 	return nil
 }
 
+func (c *Catalog) rebuildFilesWithoutMtime() error {
+	tx, err := c.db.Begin()
+	if err != nil {
+		return fmt.Errorf("start sqlite files migration: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(fmt.Sprintf(`
+ALTER TABLE files RENAME TO files_legacy;
+DROP INDEX IF EXISTS idx_files_directory_basename;
+DROP INDEX IF EXISTS idx_files_rel_path;
+
+CREATE TABLE files (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	directory_id INTEGER NOT NULL REFERENCES directories(id) ON DELETE CASCADE,
+	basename TEXT NOT NULL,
+	extension TEXT NOT NULL,
+	rel_path TEXT NOT NULL,
+	content_hash TEXT,
+	size_bytes INTEGER,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(rel_path, basename)
+);
+
+CREATE INDEX idx_files_directory_basename ON files(directory_id, basename);
+CREATE INDEX idx_files_rel_path ON files(rel_path);
+
+INSERT INTO files (id, directory_id, basename, extension, rel_path, content_hash, size_bytes, is_deleted, created_at, updated_at)
+SELECT
+	id,
+	directory_id,
+	basename,
+	extension,
+	rel_path,
+	content_hash,
+	size_bytes,
+	is_deleted,
+	created_at,
+	updated_at
+FROM files_legacy;
+
+DROP TABLE files_legacy;
+
+PRAGMA user_version = %d;
+`, catalogSchemaVersion))
+	if err != nil {
+		return fmt.Errorf("migrate sqlite files schema: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit sqlite files migration: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Catalog) tableExists(name string) (bool, error) {
 	var count int
 	err := c.db.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&count)
@@ -283,6 +345,32 @@ func (c *Catalog) tableExists(name string) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+func (c *Catalog) hasColumn(tableName, columnName string) (bool, error) {
+	rows, err := c.db.Query(fmt.Sprintf(`PRAGMA table_info(%q)`, tableName))
+	if err != nil {
+		return false, fmt.Errorf("inspect sqlite columns for %q: %w", tableName, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, dataType string
+		var notNull, primaryKey int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false, fmt.Errorf("scan sqlite column for %q: %w", tableName, err)
+		}
+		if name == columnName {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterate sqlite columns for %q: %w", tableName, err)
+	}
+
+	return false, nil
 }
 
 func (c *Catalog) hasLegacyRelPathUniqueIndex(tableName string) (bool, error) {
@@ -470,17 +558,16 @@ func (c *Catalog) UpsertFiles(dirPath string, files []File) error {
 		}
 
 		_, err = execTarget.Exec(`
-INSERT INTO files (directory_id, basename, extension, rel_path, size_bytes, mtime_utc, is_deleted, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+INSERT INTO files (directory_id, basename, extension, rel_path, size_bytes, is_deleted, updated_at)
+VALUES (?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
 ON CONFLICT(rel_path, basename) DO UPDATE SET
   directory_id = excluded.directory_id,
   basename = excluded.basename,
   extension = excluded.extension,
   size_bytes = excluded.size_bytes,
-  mtime_utc = excluded.mtime_utc,
   is_deleted = 0,
   updated_at = CURRENT_TIMESTAMP
-		`, directoryID, file.Name, filepath.Ext(file.Name), storedFileRelPath(directoryRelPath), info.Size(), info.ModTime().UTC().Format(time.RFC3339))
+		`, directoryID, file.Name, filepath.Ext(file.Name), storedFileRelPath(directoryRelPath), info.Size())
 		if err != nil {
 			return fmt.Errorf("upsert sqlite file %q: %w", actualRelPath, err)
 		}

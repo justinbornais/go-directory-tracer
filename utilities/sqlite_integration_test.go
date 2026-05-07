@@ -239,6 +239,29 @@ WHERE f.rel_path = ? AND f.basename = ?
 	}
 }
 
+func TestOpenCatalogRemovesUnusedMtimeColumn(t *testing.T) {
+	root := copyFixtureToTempDir(t)
+	currentPath := filepath.Join(root, "catalog.db")
+	seedCurrentCatalogWithMtime(t, currentPath)
+
+	catalog, err := OpenCatalog(root, "catalog.db")
+	if err != nil {
+		t.Fatalf("open sqlite catalog with mtime column: %v", err)
+	}
+	defer catalog.Close()
+
+	hasColumn, err := catalog.hasColumn("files", "mtime_utc")
+	if err != nil {
+		t.Fatalf("inspect sqlite files columns: %v", err)
+	}
+	if hasColumn {
+		t.Fatal("expected mtime_utc column to be removed from files table")
+	}
+
+	assertCatalogHasFile(t, catalog, "docs/", "guide.txt")
+	assertCatalogHasDirectory(t, catalog, "", "albums")
+}
+
 func TestCatalogVacuumAfterSync(t *testing.T) {
 	root := copyFixtureToTempDir(t)
 	catalog, err := OpenCatalog(root, "catalog.db")
@@ -321,6 +344,71 @@ VALUES (1, 'https://legacy.example/root-song', CURRENT_TIMESTAMP);
 `)
 	if err != nil {
 		t.Fatalf("seed legacy sqlite catalog: %v", err)
+	}
+}
+
+func seedCurrentCatalogWithMtime(t *testing.T, filePath string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", filePath)
+	if err != nil {
+		t.Fatalf("open sqlite catalog for seeding: %v", err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE directories (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	parent_id INTEGER REFERENCES directories(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	rel_path TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(rel_path, name)
+);
+
+CREATE TABLE files (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	directory_id INTEGER NOT NULL REFERENCES directories(id) ON DELETE CASCADE,
+	basename TEXT NOT NULL,
+	extension TEXT NOT NULL,
+	rel_path TEXT NOT NULL,
+	content_hash TEXT,
+	size_bytes INTEGER,
+	mtime_utc TEXT,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(rel_path, basename)
+);
+
+CREATE TABLE file_metadata (
+	file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+	external_link TEXT,
+	notes TEXT,
+	title_override TEXT,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_directories_parent_name ON directories(parent_id, name);
+CREATE INDEX idx_files_directory_basename ON files(directory_id, basename);
+CREATE INDEX idx_files_rel_path ON files(rel_path);
+
+INSERT INTO directories (id, parent_id, name, rel_path) VALUES
+	(1, NULL, 'tmp-root', ''),
+	(2, 1, 'albums', ''),
+	(3, 1, 'docs', '');
+
+INSERT INTO files (id, directory_id, basename, extension, rel_path, size_bytes, mtime_utc, is_deleted) VALUES
+	(1, 1, 'song.mp3', '.mp3', '', 12, '2026-05-07T00:00:00Z', 0),
+	(2, 3, 'guide.txt', '.txt', 'docs/', 24, '2026-05-07T00:00:00Z', 0);
+
+PRAGMA user_version = 2;
+`)
+	if err != nil {
+		t.Fatalf("seed sqlite catalog with mtime column: %v", err)
 	}
 }
 
