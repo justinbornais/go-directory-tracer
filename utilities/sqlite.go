@@ -621,6 +621,20 @@ func (c *Catalog) Close() error {
 	return c.db.Close()
 }
 
+func (c *Catalog) Vacuum() error {
+	if c == nil {
+		return fmt.Errorf("sqlite catalog is not initialized")
+	}
+	if c.tx != nil {
+		return fmt.Errorf("sqlite vacuum must run outside a transaction")
+	}
+	if _, err := c.db.Exec(`VACUUM`); err != nil {
+		return fmt.Errorf("vacuum sqlite catalog: %w", err)
+	}
+
+	return nil
+}
+
 type sqlExecTarget interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }

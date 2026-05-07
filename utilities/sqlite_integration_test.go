@@ -239,6 +239,30 @@ WHERE f.rel_path = ? AND f.basename = ?
 	}
 }
 
+func TestCatalogVacuumAfterSync(t *testing.T) {
+	root := copyFixtureToTempDir(t)
+	catalog, err := OpenCatalog(root, "catalog.db")
+	if err != nil {
+		t.Fatalf("open sqlite catalog: %v", err)
+	}
+	defer catalog.Close()
+
+	runFromDir(t, root, func() {
+		if err := catalog.WithSyncTransaction(func() error {
+			IndexFolder(".", GenerateBoilerplateHTML("Fixture", "", ""), 0, nil, true, false, true, false, catalog, true)
+			return nil
+		}); err != nil {
+			t.Fatalf("sync SQLite catalog in transaction: %v", err)
+		}
+	})
+
+	if err := catalog.Vacuum(); err != nil {
+		t.Fatalf("vacuum sqlite catalog: %v", err)
+	}
+
+	assertCatalogHasFile(t, catalog, "", "song.mp3")
+}
+
 func seedLegacyCatalog(t *testing.T, filePath string) {
 	t.Helper()
 

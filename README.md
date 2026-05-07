@@ -41,7 +41,7 @@ To generate the cross-directory `search.html` page, enable SQLite and global sea
 ./tracer --title "Some Website Title" --sqlite "catalog.db" --global-search
 ```
 
-When SQLite is enabled, the tracer will create or migrate the schema if needed, merge discovered directories and files into the catalog, store `rel_path` as the parent directory path, and prefer `file_metadata.external_link` over `metadata.json` when both are present. With `--sqlite-prune-missing`, stale file rows, stale directory rows, and related `file_metadata` rows are removed in the same sync. The generated site stays static and still emits the same `u` field in `data.json` and the inline page data. Global search now reads its index from SQLite instead of the in-memory directory walk.
+When SQLite is enabled, the tracer will create or migrate the schema if needed, merge discovered directories and files into the catalog, store `rel_path` as the parent directory path, and prefer `file_metadata.external_link` over `metadata.json` when both are present. With `--sqlite-prune-missing`, stale file rows, stale directory rows, and related `file_metadata` rows are removed in the same sync. After tracing completes, the SQLite catalog is vacuumed automatically. The generated site stays static and still emits the same `u` field in `data.json` and the inline page data. Global search now reads its index from SQLite instead of the in-memory directory walk.
 
 ### Cloning the Repository
 Make sure you have Golang installed. After cloning the repository, you have more flexibility to modify the CSS and JS to your own styles.

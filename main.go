@@ -69,6 +69,9 @@ func main() {
 		searchHTML := utilities.GenerateSearchHTML(*title, css, searchJS)
 		utilities.CheckError(utilities.WriteSearchPage(searchHTML, catalog))
 	}
+	if catalog != nil {
+		utilities.CheckError(catalog.Vacuum())
+	}
 
 	fmt.Println("Done.")
 }
