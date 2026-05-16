@@ -34,3 +34,6 @@ audio { margin:.35rem 0 .65rem }
 .audio-link { margin-left:.5rem;font-size:.9em;font-weight:normal }
 .gs-link{font-size:.85rem;display:inline-block;margin:.2rem 0;text-decoration:none;opacity:.7}
 .gs-link:hover{opacity:1}
+.cl-link{font-size:.85rem;display:inline-block;margin:.2rem .5rem .2rem 0;padding:.15rem .5rem;border-radius:5px;text-decoration:none;border:1px solid}
+@media(prefers-color-scheme:light){.cl-link{border-color:#c9cdd5;color:#1565c0}.cl-link:hover{background:rgba(21,101,192,.08);border-color:#1565c0}}
+@media(prefers-color-scheme:dark){.cl-link{border-color:#282d3e;color:#82b4ff}.cl-link:hover{background:rgba(130,180,255,.08);border-color:#82b4ff}}

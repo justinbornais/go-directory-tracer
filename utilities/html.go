@@ -5,6 +5,47 @@ import (
 	"strings"
 )
 
+// Link represents a single custom navigation link.
+type Link struct {
+	Label string
+	URL   string
+}
+
+// ParseLinks parses a comma-separated list of "Label:URL" pairs.
+// The split is on the first colon only so URLs like https://... work correctly.
+func ParseLinks(raw string) []Link {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var links []Link
+	for _, pair := range strings.Split(raw, ",") {
+		idx := strings.Index(pair, ":")
+		if idx < 1 {
+			continue
+		}
+		label := strings.TrimSpace(pair[:idx])
+		url := strings.TrimSpace(pair[idx+1:])
+		if label != "" && url != "" {
+			links = append(links, Link{Label: label, URL: url})
+		}
+	}
+	return links
+}
+
+// GenerateLinksHTML returns the HTML snippet for the custom navigation links,
+// or an empty string when there are no links.
+func GenerateLinksHTML(links []Link) string {
+	if len(links) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for _, l := range links {
+		sb.WriteString(fmt.Sprintf(`<a class="cl-link" href="%s">%s</a>`, l.URL, l.Label))
+	}
+	return sb.String()
+}
+
 func GenerateBoilerplateHTML(title, css, js string) string {
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -17,7 +58,7 @@ func GenerateBoilerplateHTML(title, css, js string) string {
     <style>%s</style>
 </head>
 <body>
-    <div id="top"><h1>[parent]<a class="n" href="[base]">%s</a>[dir]</h1>[global-search]
+    <div id="top"><h1>[parent]<a class="n" href="[base]">%s</a>[dir]</h1>[global-search][links]
         <input type="search" class="q" id="q" placeholder="Search..." />
     </div>
     <ul id="dl"></ul>
@@ -41,7 +82,7 @@ func GenerateSearchHTML(title, css, js string) string {
 <body>
     <div id="top">
         <h1><b><a href="./" class="p">&#8592;</a></b><a class="n" href="./">%s</a> &#8212; Global Search</h1>
-        <input type="search" class="q" id="q" placeholder="Search all files and folders..." autofocus />
+        [links]<input type="search" class="q" id="q" placeholder="Search all files and folders..." autofocus />
     </div>
     <div id="dl"></div>
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>

@@ -4,6 +4,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"strings"
 
 	"github.com/justinbornais/go-directory-tracer/utilities"
 )
@@ -24,6 +25,7 @@ func main() {
 	sqlitePruneMissing := flag.Bool("sqlite-prune-missing", false, "Remove SQLite rows for files and directories that no longer exist on disk")
 	sqliteTimestamps := flag.Bool("sqlite-timestamps", false, "Include created_at and updated_at Unix timestamp columns in the SQLite catalog")
 	globalSearch := flag.Bool("global-search", false, "Generate a root-level search.html with a cross-directory search index")
+	links := flag.String("links", "", "Comma-separated Label:URL pairs for extra navigation links shown at the top of every page (e.g. 'Home:https://example.com,Docs:https://docs.example.com')")
 	flag.Parse()
 
 	css := utilities.GetCSS(StaticFiles)
@@ -50,6 +52,8 @@ func main() {
 	}
 
 	html := utilities.GenerateBoilerplateHTML(*title, css, js)
+	linksHTML := utilities.GenerateLinksHTML(utilities.ParseLinks(*links))
+	html = strings.ReplaceAll(html, "[links]", linksHTML)
 
 	if catalog != nil {
 		utilities.CheckError(catalog.WithSyncTransaction(func() error {
@@ -68,6 +72,7 @@ func main() {
 	if *globalSearch && !*sqliteOnly {
 		searchJS := utilities.GetSearchJS(StaticFiles)
 		searchHTML := utilities.GenerateSearchHTML(*title, css, searchJS)
+		searchHTML = strings.ReplaceAll(searchHTML, "[links]", linksHTML)
 		utilities.CheckError(utilities.WriteSearchPage(searchHTML, catalog))
 	}
 	if catalog != nil {
